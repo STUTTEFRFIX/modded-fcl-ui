@@ -80,17 +80,20 @@ APK 作为 Release 附件发布（不放进 git 树，避免仓库膨胀）：
 ## 4. 文档
 
 - [模组关系图：架构与实现](docs/17-模组关系图/README.md)
+- [参考项目：Modpack Studio](docs/18-参考项目-Modpack-Studio/README.md)
 - [无地区限制构建与工具链](docs/15-最新构建/README.md)
 - [构建说明](BUILD.md)
 - [变更记录](CHANGELOG.md)
 - [补丁说明](patches/README.md)
 - [测试数据](test-data/graph-test-addon/README.md)
+- [第三方组件与参考项目](THIRD_PARTY.md)
 
 ---
 
 ## 5. 许可证与来源
 
 - 本仓库基于 **Fold Craft Launcher**，上游以 **GPLv3** 发布；`source/LICENSE` 为上游许可证。
+- 模组关系图的交互与数据规则参考 **[Modpack Studio](https://github.com/STUTTEFRFIX/modpack-studio)**（MIT，参考提交 `05499fe`）；FCL 侧为独立 Java/Kotlin 实现。详见 [参考项目文档](docs/18-参考项目-Modpack-Studio/README.md) 与 [THIRD_PARTY.md](THIRD_PARTY.md)。
 - 模组名称、图标、介绍文本版权归各模组作者所有。
 - Modrinth API 与公开元数据按其服务条款使用。
-- 本仓库为私有仓库；如需再分发，请遵守 GPLv3 与上游项目的要求。
+- 本仓库为私有仓库；如需再分发，请遵守 GPLv3、MIT 署名与上游项目的要求。

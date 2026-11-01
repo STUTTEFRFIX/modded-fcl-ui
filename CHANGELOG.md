@@ -15,6 +15,10 @@
 - 测试：`ModGraphBuilderTest` 6 项 + `ModDependencyParsingTest` 4 项，全部通过。
 - 构建：`FCL-1.3.4.1-noregion-modgraph-arm64-v8a.apk`（174 MB）。
 
+### 文档
+
+- 记录参考项目 Modpack Studio（MIT，参考提交 `05499fe`）：新增 `docs/18-参考项目-Modpack-Studio/` 与 `THIRD_PARTY.md`，README 补充来源与署名。
+
 ## 2026-10-24
 
 - 在本机从源码完整构建 FCL，去掉陶瓦节点地区过滤，包名 `com.tungsten.fcl.noregion`。
