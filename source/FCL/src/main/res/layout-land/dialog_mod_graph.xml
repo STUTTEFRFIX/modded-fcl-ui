@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:baselineAligned="false"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1">
+
+        <com.tungsten.fcl.ui.manage.graph.ModGraphView
+            android:id="@+id/graph_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.tungsten.fcllibrary.component.view.FCLProgressBar
+            android:id="@+id/progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <com.tungsten.fcllibrary.component.view.FCLTextView
+            android:id="@+id/empty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:text="@string/mods_graph_empty"
+            android:textSize="13sp"
+            android:visibility="gone"
+            app:auto_text_tint="true" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.tungsten.fcllibrary.component.view.FCLTextView
+                android:id="@+id/title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/mods_graph_title"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:auto_text_tint="true" />
+
+            <com.tungsten.fcllibrary.component.view.FCLImageButton
+                android:id="@+id/close"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/button_cancel"
+                android:src="@drawable/ic_baseline_close_24"
+                app:auto_tint="true" />
+        </LinearLayout>
+
+        <com.tungsten.fcllibrary.component.view.FCLTextView
+            android:id="@+id/summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            app:auto_text_tint="true" />
+
+        <com.tungsten.fcllibrary.component.view.FCLCheckBox
+            android:id="@+id/hide_isolated"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/mods_graph_hide_isolated"
+            app:auto_hint_tint="true" />
+
+        <com.tungsten.fcllibrary.component.view.FCLCheckBox
+            android:id="@+id/online"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/mods_graph_online"
+            app:auto_hint_tint="true" />
+
+        <com.tungsten.fcllibrary.component.view.FCLTextView
+            android:id="@+id/online_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="11sp"
+            android:visibility="gone"
+            app:auto_text_tint="true" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/legend"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:id="@+id/detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_container_white"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <com.tungsten.fcllibrary.component.view.FCLTextView
+                android:id="@+id/detail_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="@string/mods_graph_no_selection"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                app:auto_text_tint="true" />
+
+            <com.tungsten.fcllibrary.component.view.FCLTextView
+                android:id="@+id/detail_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="11sp"
+                app:auto_text_tint="true" />
+
+            <com.tungsten.fcllibrary.component.view.FCLTextView
+                android:id="@+id/detail_deps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textSize="11sp"
+                app:auto_text_tint="true" />
+
+            <com.tungsten.fcllibrary.component.view.FCLTextView
+                android:id="@+id/detail_dependents"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textSize="11sp"
+                app:auto_text_tint="true" />
+
+            <com.tungsten.fcllibrary.component.view.FCLTextView
+                android:id="@+id/detail_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="11sp"
+                app:auto_text_tint="true" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

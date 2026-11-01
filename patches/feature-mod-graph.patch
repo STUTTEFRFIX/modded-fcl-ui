@@ -1,0 +1,2937 @@
+diff -ruN a/FCL/src/main/java/com/tungsten/fcl/ui/manage/ModListPage.java b/FCL/src/main/java/com/tungsten/fcl/ui/manage/ModListPage.java
+--- a/FCL/src/main/java/com/tungsten/fcl/ui/manage/ModListPage.java	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fcl/ui/manage/ModListPage.java	2026-11-01 11:19:29.409999511 +0800
+@@ -27,6 +27,7 @@
+ import com.tungsten.fcl.ui.TaskDialog;
+ import com.tungsten.fcl.ui.UIManager;
+ import com.tungsten.fcl.ui.download.DownloadUI;
++import com.tungsten.fcl.ui.manage.graph.ModGraphDialog;
+ import com.tungsten.fcl.util.ModTranslations;
+ import com.tungsten.fcl.util.TaskCancellationAction;
+ import com.tungsten.fclcore.download.LibraryAnalyzer;
+@@ -42,6 +43,8 @@
+ import com.tungsten.fclcore.mod.LocalModFile;
+ import com.tungsten.fclcore.mod.ModManager;
+ import com.tungsten.fclcore.mod.RemoteMod;
++import com.tungsten.fclcore.mod.graph.ModGraph;
++import com.tungsten.fclcore.mod.graph.ModGraphBuilder;
+ import com.tungsten.fclcore.task.Schedulers;
+ import com.tungsten.fclcore.task.Task;
+ import com.tungsten.fclcore.task.TaskExecutor;
+@@ -129,11 +132,13 @@
+     private ScrollView left;
+     private CoordinatorLayout right;
+     private FCLEditText searchBar;
++    private FCLTextView graphSummary;
+     private FCLLinearLayout normalGroup;
+     private FCLLinearLayout selectedGroup;
+     private FCLButton addButton;
+     private FCLButton checkUpdateAllButton;
+     private FCLButton checkUpdateButton;
++    private FCLButton graphButton;
+     private FCLButton refreshButton;
+     private FCLButton sortButton;
+     private FCLButton deleteButton;
+@@ -170,11 +175,13 @@
+         left = findViewById(R.id.left);
+         right = findViewById(R.id.right);
+         searchBar = findViewById(R.id.search_filter);
++        graphSummary = findViewById(R.id.graph_summary);
+         normalGroup = findViewById(R.id.normal_layout);
+         selectedGroup = findViewById(R.id.selected_layout);
+         addButton = findViewById(R.id.add);
+         checkUpdateAllButton = findViewById(R.id.check_update_all);
+         checkUpdateButton = findViewById(R.id.check_update);
++        graphButton = findViewById(R.id.graph);
+         refreshButton = findViewById(R.id.refresh);
+         sortButton = findViewById(R.id.sort);
+         deleteButton = findViewById(R.id.delete);
+@@ -189,6 +196,7 @@
+         addButton.setOnClickListener(this);
+         checkUpdateAllButton.setOnClickListener(this);
+         checkUpdateButton.setOnClickListener(this);
++        graphButton.setOnClickListener(this);
+         refreshButton.setOnClickListener(this);
+         sortButton.setOnClickListener(this);
+         deleteButton.setOnClickListener(this);
+@@ -249,6 +257,9 @@
+             checkUpdateButton.setFocusable(false);
+             checkUpdates(true);
+         }
++        if (v == graphButton) {
++            openGraph();
++        }
+         if (v == refreshButton) {
+             refresh();
+         }
+@@ -325,6 +336,7 @@
+                 addButton.setEnabled(false);
+                 checkUpdateAllButton.setEnabled(false);
+                 checkUpdateButton.setEnabled(false);
++                graphButton.setEnabled(false);
+                 refreshButton.setEnabled(false);
+                 sortButton.setEnabled(false);
+                 deleteButton.setEnabled(false);
+@@ -343,6 +355,7 @@
+                 addButton.setEnabled(true);
+                 checkUpdateAllButton.setEnabled(true);
+                 checkUpdateButton.setEnabled(true);
++                graphButton.setEnabled(true);
+                 refreshButton.setEnabled(true);
+                 sortButton.setEnabled(true);
+                 deleteButton.setEnabled(true);
+@@ -809,6 +822,54 @@
+         long activeCount = allMods.stream().filter(modInfoObject -> modInfoObject.getModInfo().isActive()).count();
+         enabled.setText(getContext().getString(R.string.enabled) + " (" + activeCount + ")");
+         disabled.setText(getContext().getString(R.string.disabled) + " (" + (allMods.size() - activeCount) + ")");
++        updateGraphSummary();
++    }
++
++    /** 扫描完成后在列表顶部显示一行依赖分布；图构建是 O(节点+边)，放在主线程没问题。 */
++    private void updateGraphSummary() {
++        List<ModGraphBuilder.Input> inputs = new ArrayList<>(allMods.size());
++        for (ModInfoObject object : allMods) {
++            LocalModFile file = object.getModInfo();
++            if (file == null || file.isOld()) {
++                continue;
++            }
++            inputs.add(ModGraphBuilder.Input.from(file));
++        }
++        ModGraph graph = ModGraphBuilder.build(inputs);
++        if (graphSummary == null) {
++            return;
++        }
++        ModGraph.Stats stats = graph.getStats();
++        if (stats.nodes() == 0) {
++            graphSummary.setText("");
++            graphSummary.setVisibility(View.GONE);
++        } else {
++            graphSummary.setText(getContext().getString(R.string.mods_graph_summary,
++                    stats.nodes(), stats.edges(), stats.hubs(), stats.isolated(), stats.missing()));
++            graphSummary.setVisibility(View.VISIBLE);
++        }
++    }
++
++    /** 打开关系图。把列表里已经查到的远程信息带过去，避免重复请求。 */
++    private void openGraph() {
++        List<LocalModFile> files = new ArrayList<>();
++        Map<String, RemoteMod> knownRemote = new HashMap<>();
++        for (ModInfoObject object : allMods) {
++            LocalModFile file = object.getModInfo();
++            if (file == null || file.isOld()) {
++                continue;
++            }
++            files.add(file);
++            RemoteMod remote = object.getRemoteMod();
++            if (remote != null) {
++                knownRemote.put(file.getFileName(), remote);
++            }
++        }
++        if (files.isEmpty()) {
++            Toast.makeText(getContext(), R.string.mods_graph_empty, Toast.LENGTH_SHORT).show();
++            return;
++        }
++        new ModGraphDialog(getContext(), files, knownRemote).show();
+     }
+ 
+     public static class ModInfoObject {
+diff -ruN a/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphDialog.kt b/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphDialog.kt
+--- a/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphDialog.kt	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphDialog.kt	2026-11-01 11:19:30.597999511 +0800
+@@ -0,0 +1,458 @@
++package com.tungsten.fcl.ui.manage.graph
++
++import android.content.Context
++import android.graphics.Typeface
++import android.graphics.drawable.GradientDrawable
++import android.view.Gravity
++import android.view.View
++import android.view.ViewGroup
++import android.view.WindowManager
++import android.widget.LinearLayout
++import android.widget.TextView
++import com.tungsten.fcl.R
++import com.tungsten.fclcore.mod.LocalModFile
++import com.tungsten.fclcore.mod.RemoteMod
++import com.tungsten.fcl.util.ModTranslations
++import com.tungsten.fclcore.mod.graph.ModGraph
++import com.tungsten.fclcore.mod.graph.ModGraphBuilder
++import com.tungsten.fcllibrary.component.dialog.FCLDialog
++import com.tungsten.fcllibrary.component.theme.ThemeEngine
++import com.tungsten.fcllibrary.component.view.FCLCheckBox
++import com.tungsten.fcllibrary.component.view.FCLImageButton
++import com.tungsten.fcllibrary.component.view.FCLProgressBar
++import com.tungsten.fcllibrary.component.view.FCLTextView
++import com.tungsten.fcllibrary.util.LocaleUtils
++import java.util.concurrent.Executors
++import java.util.concurrent.atomic.AtomicInteger
++
++/**
++ * 模组关系图对话框：离线依赖图立即显示，Modrinth 分类在后台补全。
++ *
++ * 数据来源分两层：
++ * 1. 本地 jar 元数据（fabric.mod.json / mods.toml / ...）→ 节点与依赖边；
++ * 2. 打开后按 SHA-1 反查 Modrinth → 分类、简介、图标（仅用于着色和详情，不阻塞本地图）。
++ */
++class ModGraphDialog(
++    context: Context,
++    private val mods: List<LocalModFile>,
++    private val knownRemote: Map<String, RemoteMod> = emptyMap()
++) : FCLDialog(context), View.OnClickListener {
++
++    private lateinit var graphView: ModGraphView
++    private lateinit var closeButton: FCLImageButton
++    private lateinit var summaryView: FCLTextView
++    private lateinit var hideIsolated: FCLCheckBox
++    private lateinit var online: FCLCheckBox
++    private lateinit var progress: FCLProgressBar
++    private lateinit var emptyView: FCLTextView
++    private lateinit var onlineStatus: FCLTextView
++    private lateinit var legend: LinearLayout
++    private lateinit var detailName: FCLTextView
++    private lateinit var detailMeta: FCLTextView
++    private lateinit var detailDeps: FCLTextView
++    private lateinit var detailDependents: FCLTextView
++    private lateinit var detailStatus: FCLTextView
++
++    private var graph: ModGraph? = null
++    private var selectedNode: ModGraph.Node? = null
++    private val inputs = ArrayList<ModGraphBuilder.Input>()
++    private val fileByNodeId = HashMap<String, LocalModFile>()
++    private val remoteById = HashMap<String, RemoteMod>()
++    private val categoryById = HashMap<String, String>()
++    private val categoryColors = HashMap<String, Int>()
++    private val displayNames = HashMap<String, String>()
++
++    private val executor = Executors.newFixedThreadPool(3)
++
++    @Volatile
++    private var enrichGeneration = 0
++
++    @Volatile
++    private var destroyed = false
++
++    private var lastLegendSignature = ""
++    private var enrichmentStarted = false
++
++    private val isChinese: Boolean by lazy { LocaleUtils.isChinese(context) }
++
++    private val density = context.resources.displayMetrics.density
++
++    private fun dp(value: Float): Float = value * density
++
++    init {
++        setCancelable(true)
++        setContentView(R.layout.dialog_mod_graph)
++        window?.setLayout(
++            WindowManager.LayoutParams.MATCH_PARENT,
++            WindowManager.LayoutParams.MATCH_PARENT
++        )
++
++        graphView = findViewById<ModGraphView>(R.id.graph_view)!!
++        closeButton = findViewById<FCLImageButton>(R.id.close)!!
++        summaryView = findViewById<FCLTextView>(R.id.summary)!!
++        hideIsolated = findViewById<FCLCheckBox>(R.id.hide_isolated)!!
++        online = findViewById<FCLCheckBox>(R.id.online)!!
++        progress = findViewById<FCLProgressBar>(R.id.progress)!!
++        emptyView = findViewById<FCLTextView>(R.id.empty)!!
++        onlineStatus = findViewById<FCLTextView>(R.id.online_status)!!
++        legend = findViewById<LinearLayout>(R.id.legend)!!
++        detailName = findViewById<FCLTextView>(R.id.detail_name)!!
++        detailMeta = findViewById<FCLTextView>(R.id.detail_meta)!!
++        detailDeps = findViewById<FCLTextView>(R.id.detail_deps)!!
++        detailDependents = findViewById<FCLTextView>(R.id.detail_dependents)!!
++        detailStatus = findViewById<FCLTextView>(R.id.detail_status)!!
++
++        closeButton.setOnClickListener(this)
++        hideIsolated.setOnCheckedChangeListener { _, checked -> graphView.setHideIsolated(checked) }
++        online.setOnCheckedChangeListener { _, checked ->
++            if (checked) enrichOnline() else stopEnrichment()
++        }
++        graphView.onNodeSelected = { node -> showDetail(node) }
++        graphView.onLayoutStateChanged = { running ->
++            progress.visibility = if (running) View.VISIBLE else View.GONE
++            // 布局算完再开始网络补全，避免力导向计算和 100+ 个 SHA-1/HTTP 请求抢 CPU
++            if (!running && online.isChecked) {
++                enrichOnline()
++            }
++        }
++
++        buildGraph()
++    }
++
++    private fun buildGraph() {
++        for (file in mods) {
++            if (file.isOld) continue
++            val input = ModGraphBuilder.Input.from(file)
++            if (input.id.isBlank()) continue
++            inputs.add(input)
++            // 同一 mod id 可能同时有 .jar 和 .jar.disabled；和 ModGraphBuilder 一样启用优先
++            val previous = fileByNodeId[input.id]
++            if (previous == null || (!previous.isActive && file.isActive)) {
++                fileByNodeId[input.id] = file
++                knownRemote[file.fileName]?.let { remoteById[input.id] = it }
++            }
++        }
++        val built = ModGraphBuilder.build(inputs)
++        graph = built
++        graphView.setGraph(built)
++        // setGraph 会清空节点分类色，所以已知的远程信息要在它之后应用
++        for ((id, remote) in remoteById.toList()) {
++            applyRemote(id, remote, updateUi = true)
++        }
++        applyChineseNames(built)
++        if (built.isEmpty) {
++            emptyView.visibility = View.VISIBLE
++            progress.visibility = View.GONE
++        }
++        val stats = built.stats
++        summaryView.text = context.getString(
++            R.string.mods_graph_summary,
++            stats.nodes, stats.edges, stats.hubs, stats.isolated, stats.missing
++        )
++        rebuildLegend()
++        showDetail(null)
++    }
++
++    override fun onClick(v: View) {
++        if (v === closeButton) {
++            dismiss()
++        }
++    }
++
++    private fun showDetail(node: ModGraph.Node?) {
++        selectedNode = node
++        if (node == null) {
++            detailName.text = context.getString(R.string.mods_graph_no_selection)
++            detailMeta.text = ""
++            detailDeps.text = ""
++            detailDependents.text = ""
++            detailStatus.text = ""
++            return
++        }
++        val category = categoryLabel(categoryById[node.id])
++        detailName.text = buildString {
++            append(displayName(node))
++            if (node.version.isNotBlank()) {
++                append(' ').append(node.version)
++            }
++        }
++        detailMeta.text = buildString {
++            append(category)
++            append(" · ")
++            append(context.getString(R.string.mods_graph_direct_deps)).append(' ').append(node.outDegree)
++            append(" · ")
++            append(context.getString(R.string.mods_graph_dependents)).append(' ').append(node.inDegree)
++        }
++        detailDeps.text = context.getString(R.string.mods_graph_direct_deps) + ": " +
++                names(node.outgoing.map { it.target })
++        detailDependents.text = context.getString(R.string.mods_graph_dependents) + ": " +
++                names(node.incoming.map { it.source })
++        detailStatus.text = when {
++            node.isMissing -> context.getString(R.string.mods_graph_missing)
++            !node.isActive -> context.getString(R.string.mods_graph_disabled)
++            node.isHub -> context.getString(R.string.mods_graph_hub)
++            node.isIsolated -> context.getString(R.string.mods_graph_isolated)
++            else -> ""
++        }
++    }
++
++    private fun names(nodes: List<ModGraph.Node>): String {
++        if (nodes.isEmpty()) {
++            return context.getString(R.string.mods_graph_no_deps)
++        }
++        val head = nodes.take(8).joinToString(", ") { displayName(it) }
++        return if (nodes.size > 8) "$head …" else head
++    }
++
++    private fun displayName(node: ModGraph.Node): String {
++        return displayNames[node.id] ?: node.name
++    }
++
++    /**
++     * 用 FCL 自带的 mcmod.cn 译名替换图上的英文名。
++     * 缺失前置节点只有 mod id，也尝试查一次译名表。
++     */
++    private fun applyChineseNames(graph: ModGraph) {
++        if (!isChinese) return
++        displayNames.clear()
++        for ((id, file) in fileByNodeId) {
++            val name = ModTranslations.MOD.getMod(file.id, file.name)?.name
++            if (!name.isNullOrBlank()) {
++                displayNames[id] = name
++            }
++        }
++        for (node in graph.nodes) {
++            if (node.isMissing) {
++                val name = ModTranslations.MOD.getMod(node.id, "")?.name
++                if (!name.isNullOrBlank()) {
++                    displayNames[node.id] = name
++                }
++            }
++        }
++        graphView.setDisplayNames(displayNames)
++    }
++
++    private fun categoryLabel(key: String?): String {
++        if (key == null) {
++            return context.getString(R.string.mods_graph_uncategorized)
++        }
++        val entry = CATEGORY_ORDER.firstOrNull { it.first == key }
++        return when {
++            entry == null -> context.getString(R.string.mods_graph_uncategorized)
++            isChinese -> entry.second
++            else -> entry.third
++        }
++    }
++
++    private fun applyRemote(id: String, remote: RemoteMod, updateUi: Boolean = true) {
++        remoteById[id] = remote
++        val (key, _) = primaryCategory(remote.categories ?: emptyList())
++        categoryById[id] = key
++        val color = colorFor(key)
++        categoryColors[id] = color
++        if (updateUi) {
++            graphView.setNodeCategoryColor(id, color)
++            if (selectedNode?.id == id) {
++                showDetail(selectedNode)
++            }
++            rebuildLegendIfNeeded()
++        }
++    }
++
++    private fun primaryCategory(categories: List<String>): Pair<String, String> {
++        for (entry in CATEGORY_ORDER) {
++            if (categories.contains(entry.first)) {
++                return entry.first to entry.third
++            }
++        }
++        return "uncategorized" to context.getString(R.string.mods_graph_uncategorized)
++    }
++
++    private fun colorFor(key: String): Int {
++        val index = CATEGORY_ORDER.indexOfFirst { it.first == key }
++        return if (index >= 0) PALETTE[index % PALETTE.size] else PALETTE.last()
++    }
++
++    private fun enrichOnline() {
++        if (enrichmentStarted) return
++        val targets = fileByNodeId.entries
++            .filter { (id, _) -> graph?.getNode(id)?.isMissing == false && !remoteById.containsKey(id) }
++            .toList()
++        if (targets.isEmpty()) {
++            onlineStatus.visibility = View.GONE
++            progress.visibility = View.GONE
++            return
++        }
++        enrichmentStarted = true
++        val generation = ++enrichGeneration
++        val total = targets.size
++        val done = AtomicInteger(0)
++        progress.visibility = View.VISIBLE
++        onlineStatus.visibility = View.VISIBLE
++        onlineStatus.text = context.getString(R.string.mods_graph_online_progress, 0, total)
++        val repository = RemoteMod.Type.MODRINTH.remoteModRepository
++
++        for ((id, file) in targets) {
++            executor.execute {
++                if (generation != enrichGeneration || destroyed) return@execute
++                var remote: RemoteMod? = null
++                try {
++                    val version = repository.getRemoteVersionByLocalFile(file, file.file)
++                    if (version.isPresent) {
++                        remote = repository.getModById(version.get().modid())
++                    }
++                } catch (ignored: Throwable) {
++                    // 单个模组查询失败不影响其它节点；玩家自制的 jar 本来就不在 Modrinth
++                }
++                val found = remote
++                graphView.post {
++                    if (generation != enrichGeneration || destroyed) return@post
++                    if (found != null) {
++                        applyRemote(id, found)
++                    }
++                    val current = done.incrementAndGet()
++                    if (current >= total) {
++                        progress.visibility = View.GONE
++                        onlineStatus.text = context.getString(
++                            R.string.mods_graph_online_done, remoteById.size, fileByNodeId.size
++                        )
++                        rebuildLegendIfNeeded()
++                        graphView.invalidate()
++                    } else if (current % 5 == 0) {
++                        onlineStatus.text = context.getString(
++                            R.string.mods_graph_online_progress, current, total
++                        )
++                    }
++                }
++            }
++        }
++    }
++
++    private fun stopEnrichment() {
++        enrichGeneration++
++        enrichmentStarted = false
++        progress.visibility = View.GONE
++        onlineStatus.visibility = View.GONE
++    }
++
++    private fun rebuildLegendIfNeeded() {
++        val signature = categoryById.values.distinct().sorted().joinToString("|")
++        if (signature == lastLegendSignature) {
++            return
++        }
++        rebuildLegend()
++    }
++
++    private fun rebuildLegend() {
++        legend.removeAllViews()
++        lastLegendSignature = categoryById.values.distinct().sorted().joinToString("|")
++
++        addLegendMark("—", inkColor(), context.getString(R.string.mods_graph_legend_required))
++        addLegendMark("--", inkColor(), context.getString(R.string.mods_graph_legend_optional))
++        addLegendMark("--", 0xFFE05252.toInt(), context.getString(R.string.mods_graph_legend_incompatible))
++        addLegendMark("○", inkColor(), context.getString(R.string.mods_graph_legend_missing))
++        addLegendMark("○", inkColor(), context.getString(R.string.mods_graph_legend_disabled))
++
++        val keys = categoryById.values.distinct()
++            .sortedBy { key -> CATEGORY_ORDER.indexOfFirst { it.first == key }.let { if (it < 0) Int.MAX_VALUE else it } }
++        for (key in keys) {
++            addLegendDot(colorFor(key), categoryLabel(key))
++        }
++    }
++
++    private fun addLegendMark(mark: String, color: Int, label: String) {
++        val item = LinearLayout(context).apply {
++            orientation = LinearLayout.HORIZONTAL
++            gravity = Gravity.CENTER_VERTICAL
++        }
++        val markView = TextView(context).apply {
++            text = mark
++            setTextColor(color)
++            textSize = 11f
++            typeface = Typeface.MONOSPACE
++        }
++        val labelView = TextView(context).apply {
++            text = label
++            setTextColor(inkColor())
++            textSize = 10f
++        }
++        item.addView(markView, LinearLayout.LayoutParams(
++            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
++        ).apply { marginEnd = dp(3f).toInt() })
++        item.addView(labelView)
++        legend.addView(item, LinearLayout.LayoutParams(
++            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
++        ).apply { marginEnd = dp(12f).toInt() })
++    }
++
++    private fun addLegendDot(color: Int, label: String) {
++        val item = LinearLayout(context).apply {
++            orientation = LinearLayout.HORIZONTAL
++            gravity = Gravity.CENTER_VERTICAL
++        }
++        val size = dp(8f).toInt()
++        val dot = View(context).apply {
++            background = GradientDrawable().apply {
++                shape = GradientDrawable.OVAL
++                setColor(color)
++            }
++        }
++        item.addView(dot, LinearLayout.LayoutParams(size, size).apply {
++            marginEnd = dp(4f).toInt()
++        })
++        item.addView(TextView(context).apply {
++            text = label
++            setTextColor(inkColor())
++            textSize = 10f
++        })
++        legend.addView(item, LinearLayout.LayoutParams(
++            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
++        ).apply { marginEnd = dp(12f).toInt() })
++    }
++
++    private fun inkColor(): Int = ThemeEngine.getInstance().getTheme().getColor2()
++
++    override fun dismiss() {
++        destroyed = true
++        enrichGeneration++
++        executor.shutdownNow()
++        super.dismiss()
++    }
++
++    companion object {
++        private val CATEGORY_ORDER = listOf(
++            Triple("technology", "科技", "Technology"),
++            Triple("magic", "魔法", "Magic"),
++            Triple("adventure", "冒险", "Adventure"),
++            Triple("worldgen", "世界生成", "Worldgen"),
++            Triple("decoration", "建筑装饰", "Decoration"),
++            Triple("building", "建筑", "Building"),
++            Triple("storage", "存储物流", "Storage"),
++            Triple("transportation", "运输", "Transport"),
++            Triple("food", "农业食物", "Food"),
++            Triple("agriculture", "农业", "Agriculture"),
++            Triple("equipment", "装备工具", "Equipment"),
++            Triple("combat", "战斗", "Combat"),
++            Triple("mobs", "生物", "Mobs"),
++            Triple("quests", "任务", "Quests"),
++            Triple("game-mechanics", "机制", "Mechanics"),
++            Triple("management", "管理", "Management"),
++            Triple("utility", "工具", "Utility"),
++            Triple("optimization", "优化", "Optimization"),
++            Triple("library", "前置库", "Library")
++        )
++
++        private val PALETTE = intArrayOf(
++            0xFF4E79A7.toInt(),
++            0xFFF28E2B.toInt(),
++            0xFFE15759.toInt(),
++            0xFF76B7B2.toInt(),
++            0xFF59A14F.toInt(),
++            0xFFB6992D.toInt(),
++            0xFFB07AA1.toInt(),
++            0xFFE377C2.toInt(),
++            0xFF9C755F.toInt(),
++            0xFF7F7F7F.toInt()
++        )
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphLayout.kt b/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphLayout.kt
+--- a/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphLayout.kt	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphLayout.kt	2026-11-01 11:19:30.741999511 +0800
+@@ -0,0 +1,167 @@
++package com.tungsten.fcl.ui.manage.graph
++
++import com.tungsten.fclcore.mod.graph.ModGraph
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.sqrt
++
++/**
++ * 依赖图布局：按依赖深度分层的有向图。
++ *
++ * 力导向在模组依赖图上很容易挤成一团（一个节点连十几条边，斥力和弹簧互相打架），
++ * 标签也会叠在一起。依赖关系天然有方向，所以改成「分层」：
++ *
++ * - 没有前置的节点在右（第 0 层），依赖它的节点依次向左；
++ * - 每层内按邻居的平均位置排序（barycenter），减少交叉；
++ * - 孤立节点单独排在主图下方；
++ * - 复杂度 O(V + E)，几百个节点也不需要迭代几百轮。
++ *
++ * 这个布局在后台线程计算，[ModGraphView] 负责缩放/平移。
++ */
++internal object ModGraphLayout {
++
++    class Result(
++        val x: FloatArray,
++        val y: FloatArray,
++        val radius: FloatArray,
++        val index: Map<String, Int>
++    )
++
++    private const val X_GAP = 280f
++    private const val Y_GAP = 90f
++    private const val MAX_LAYER = 12
++
++    fun compute(graph: ModGraph): Result {
++        val nodes = graph.nodes
++        val n = nodes.size
++        val index = HashMap<String, Int>(n * 2)
++        val radius = FloatArray(n)
++        for (i in 0 until n) {
++            val node = nodes[i]
++            index[node.id] = i
++            radius[i] = when {
++                node.isMissing -> 7f
++                node.isIsolated -> 6f
++                else -> min(30f, 6.5f + sqrt(node.inDegree.toFloat()) * 4.4f)
++            }
++        }
++
++        // 邻接表：out = 自己依赖谁，in = 谁依赖自己
++        val out = Array(n) { ArrayList<Int>(4) }
++        val inc = Array(n) { ArrayList<Int>(4) }
++        for (edge in graph.edges) {
++            val a = index[edge.source.id] ?: continue
++            val b = index[edge.target.id] ?: continue
++            out[a].add(b)
++            inc[b].add(a)
++        }
++
++        val connected = ArrayList<Int>(n)
++        val isolated = ArrayList<Int>()
++        for (i in 0 until n) {
++            if (out[i].isEmpty() && inc[i].isEmpty()) isolated.add(i) else connected.add(i)
++        }
++
++        // 依赖深度：叶子（没有前置）为 0，每往上一层 +1；环按 0 处理，上限压到 MAX_LAYER
++        val layer = IntArray(n) { -1 }
++        val visiting = BooleanArray(n)
++        fun depth(i: Int): Int {
++            if (layer[i] >= 0) return layer[i]
++            if (visiting[i]) return 0
++            visiting[i] = true
++            var d = 0
++            for (child in out[i]) {
++                d = max(d, 1 + depth(child))
++            }
++            visiting[i] = false
++            d = min(d, MAX_LAYER)
++            layer[i] = d
++            return d
++        }
++        for (i in connected) depth(i)
++
++        val maxLayer = if (connected.isEmpty()) 0 else connected.maxOf { layer[it] }
++        val layers = Array(maxLayer + 1) { ArrayList<Int>() }
++        for (i in connected) {
++            layers[layer[i]].add(i)
++        }
++        // 初始顺序：被依赖多的排前面
++        for (list in layers) {
++            list.sortByDescending { inc[it].size }
++        }
++
++        val pos = FloatArray(n)
++        fun assignY() {
++            for (list in layers) {
++                if (list.isEmpty()) continue
++                val half = (list.size - 1) / 2f
++                for ((idx, node) in list.withIndex()) {
++                    pos[node] = (idx - half) * Y_GAP
++                }
++            }
++        }
++        assignY()
++
++        // barycenter 扫描：先让前置对齐下游，再让上游对齐前置，重复几轮减少交叉
++        repeat(4) {
++            for (l in 1..maxLayer) {
++                val list = layers[l]
++                if (list.isEmpty()) continue
++                val desired = HashMap<Int, Float>(list.size * 2)
++                for (node in list) {
++                    val ys = out[node].filter { layer[it] < l }.map { pos[it] }
++                    desired[node] = if (ys.isEmpty()) pos[node] else ys.average().toFloat()
++                }
++                list.sortBy { desired[it] ?: pos[it] }
++                val half = (list.size - 1) / 2f
++                for ((idx, node) in list.withIndex()) {
++                    pos[node] = (idx - half) * Y_GAP
++                }
++            }
++            for (l in maxLayer - 1 downTo 0) {
++                val list = layers[l]
++                if (list.isEmpty()) continue
++                val desired = HashMap<Int, Float>(list.size * 2)
++                for (node in list) {
++                    val ys = inc[node].filter { layer[it] > l }.map { pos[it] }
++                    desired[node] = if (ys.isEmpty()) pos[node] else ys.average().toFloat()
++                }
++                list.sortBy { desired[it] ?: pos[it] }
++                val half = (list.size - 1) / 2f
++                for ((idx, node) in list.withIndex()) {
++                    pos[node] = (idx - half) * Y_GAP
++                }
++            }
++        }
++
++        val x = FloatArray(n)
++        val y = FloatArray(n)
++        // 依赖放在右侧：第 0 层（没有前置）在最右，依赖它的节点依次往左
++        for (l in 0..maxLayer) {
++            val columnX = (maxLayer - l) * X_GAP
++            for (node in layers[l]) {
++                x[node] = columnX
++                y[node] = pos[node]
++            }
++        }
++
++        // 孤立节点：主图下方单独一排，避免插进依赖链中间
++        if (isolated.isNotEmpty()) {
++            var maxY = 0f
++            for (i in connected) {
++                maxY = max(maxY, y[i])
++            }
++            val rowTop = if (connected.isEmpty()) 0f else maxY + Y_GAP * 2f
++            val cols = min(isolated.size, 8)
++            val half = (cols - 1) / 2f
++            for ((idx, node) in isolated.withIndex()) {
++                val row = idx / cols
++                val col = idx % cols
++                x[node] = (col - half) * X_GAP * 0.65f
++                y[node] = rowTop + row * Y_GAP
++            }
++        }
++
++        return Result(x, y, radius, index)
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphView.kt b/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphView.kt
+--- a/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphView.kt	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fcl/ui/manage/graph/ModGraphView.kt	2026-11-01 11:19:30.869999511 +0800
+@@ -0,0 +1,541 @@
++package com.tungsten.fcl.ui.manage.graph
++
++import android.content.Context
++import android.graphics.Canvas
++import android.graphics.Color
++import android.graphics.DashPathEffect
++import android.graphics.Paint
++import android.graphics.Path
++import android.graphics.RectF
++import android.graphics.Typeface
++import android.util.AttributeSet
++import android.view.GestureDetector
++import android.view.MotionEvent
++import android.view.ScaleGestureDetector
++import android.view.View
++import androidx.core.content.ContextCompat
++import com.tungsten.fcl.R
++import com.tungsten.fclcore.mod.ModDependency
++import com.tungsten.fclcore.mod.graph.ModGraph
++import com.tungsten.fcllibrary.component.theme.ThemeEngine
++import kotlin.math.hypot
++import kotlin.math.max
++import kotlin.math.min
++
++/**
++ * 原生 Canvas 依赖关系图：平移、双指缩放、点选高亮、标签避让。
++ *
++ * 节点/边在屏幕坐标里画，线宽和字号不随缩放变化；布局计算在后台线程完成。
++ */
++class ModGraphView @JvmOverloads constructor(
++    context: Context,
++    attrs: AttributeSet? = null,
++    defStyleAttr: Int = 0
++) : View(context, attrs, defStyleAttr) {
++
++    var onNodeSelected: ((ModGraph.Node?) -> Unit)? = null
++    var onLayoutStateChanged: ((Boolean) -> Unit)? = null
++
++    private val density = resources.displayMetrics.density
++
++    private fun dp(value: Float): Float = value * density
++
++    private var graph: ModGraph? = null
++    private var positions: ModGraphLayout.Result? = null
++    private var pendingLayout = false
++    private var layoutThread: Thread? = null
++    private var layoutGeneration = 0
++
++    private var selectedId: String? = null
++    private var hideIsolated = false
++    private val categoryColorById = HashMap<String, Int>()
++    private val displayNameById = HashMap<String, String>()
++
++    private var viewScale = 1f
++    private var offsetX = 0f
++    private var offsetY = 0f
++
++    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++        style = Paint.Style.STROKE
++        strokeCap = Paint.Cap.ROUND
++    }
++    private val nodePaint = Paint(Paint.ANTI_ALIAS_FLAG)
++    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++        style = Paint.Style.STROKE
++    }
++    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
++    private val labelStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++        style = Paint.Style.STROKE
++    }
++    private val arrowPath = Path()
++
++    private val optionalDash by lazy { DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f) }
++    private val incompatibleDash by lazy { DashPathEffect(floatArrayOf(dp(3f), dp(3f)), 0f) }
++    private val embeddedDash by lazy { DashPathEffect(floatArrayOf(dp(2f), dp(4f)), 0f) }
++    private val missingDash by lazy { DashPathEffect(floatArrayOf(dp(3f), dp(2f)), 0f) }
++    private val disabledDash by lazy { DashPathEffect(floatArrayOf(dp(4f), dp(3f)), 0f) }
++
++    private val scaleDetector = ScaleGestureDetector(context,
++        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
++            override fun onScale(detector: ScaleGestureDetector): Boolean {
++                val old = viewScale
++                if (old <= 0f) return false
++                val next = (old * detector.scaleFactor).coerceIn(0.08f, 4f)
++                if (next == old) return true
++                val focusX = detector.focusX
++                val focusY = detector.focusY
++                val worldX = (focusX - offsetX) / old
++                val worldY = (focusY - offsetY) / old
++                viewScale = next
++                offsetX = focusX - worldX * next
++                offsetY = focusY - worldY * next
++                invalidate()
++                return true
++            }
++        })
++
++    private val gestureDetector = GestureDetector(context,
++        object : GestureDetector.SimpleOnGestureListener() {
++            override fun onDown(e: MotionEvent): Boolean = true
++
++            override fun onSingleTapUp(e: MotionEvent): Boolean {
++                handleTap(e.x, e.y)
++                return true
++            }
++
++            override fun onDoubleTap(e: MotionEvent): Boolean {
++                fit()
++                return true
++            }
++        })
++
++    private var lastTouchX = 0f
++    private var lastTouchY = 0f
++
++    init {
++        isClickable = true
++    }
++
++    fun setGraph(graph: ModGraph) {
++        this.graph = graph
++        positions = null
++        selectedId = null
++        categoryColorById.clear()
++        invalidate()
++        layoutThread?.interrupt()
++        if (graph.isEmpty()) {
++            onLayoutStateChanged?.invoke(false)
++            return
++        }
++        if (width > 0 && height > 0) {
++            startLayout()
++        } else {
++            pendingLayout = true
++        }
++    }
++
++    fun setHideIsolated(hide: Boolean) {
++        if (hideIsolated == hide) return
++        hideIsolated = hide
++        invalidate()
++    }
++
++    fun setNodeCategoryColor(nodeId: String, color: Int) {
++        categoryColorById[nodeId] = color
++        invalidate()
++    }
++
++    /** 中文译名等显示名；不改变图数据里的原始 mod 名称。 */
++    fun setDisplayNames(names: Map<String, String>) {
++        displayNameById.clear()
++        displayNameById.putAll(names)
++        invalidate()
++    }
++
++    fun selectNode(id: String?) {
++        if (selectedId == id) return
++        selectedId = id
++        val node = id?.let { graph?.getNode(it) }
++        onNodeSelected?.invoke(node)
++        invalidate()
++    }
++
++    fun fit() {
++        val g = graph ?: return
++        val layout = positions ?: return
++        val indices = g.nodes.asSequence()
++            .filter { isVisible(it) }
++            .mapNotNull { layout.index[it.id] }
++            .toList()
++        if (indices.isEmpty() || width == 0 || height == 0) return
++        var minX = Float.MAX_VALUE
++        var maxX = -Float.MAX_VALUE
++        var minY = Float.MAX_VALUE
++        var maxY = -Float.MAX_VALUE
++        for (i in indices) {
++            minX = min(minX, layout.x[i] - layout.radius[i])
++            maxX = max(maxX, layout.x[i] + layout.radius[i])
++            minY = min(minY, layout.y[i] - layout.radius[i])
++            maxY = max(maxY, layout.y[i] + layout.radius[i])
++        }
++        val contentW = max(1f, maxX - minX)
++        val contentH = max(1f, maxY - minY)
++        val fitScale = min(width / contentW, height / contentH) * 0.88f
++        viewScale = fitScale.coerceIn(0.08f, 2.5f)
++        val cx = (minX + maxX) / 2f
++        val cy = (minY + maxY) / 2f
++        offsetX = width / 2f - cx * viewScale
++        offsetY = height / 2f - cy * viewScale
++        invalidate()
++    }
++
++    private fun startLayout() {
++        val g = graph ?: return
++        pendingLayout = false
++        layoutGeneration++
++        val generation = layoutGeneration
++        onLayoutStateChanged?.invoke(true)
++        val thread = Thread {
++            val result = ModGraphLayout.compute(g)
++            post {
++                if (generation != layoutGeneration) return@post
++                positions = result
++                fit()
++                onLayoutStateChanged?.invoke(false)
++                invalidate()
++            }
++        }
++        thread.isDaemon = true
++        layoutThread = thread
++        thread.start()
++    }
++
++    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
++        super.onSizeChanged(w, h, oldw, oldh)
++        if (pendingLayout && w > 0 && h > 0) {
++            startLayout()
++        } else if (positions != null && w > 0 && h > 0) {
++            // 旋转/分屏后重新适配，避免图停在旧的视口位置
++            fit()
++        }
++    }
++
++    override fun onDetachedFromWindow() {
++        layoutGeneration++
++        layoutThread?.interrupt()
++        layoutThread = null
++        super.onDetachedFromWindow()
++    }
++
++    override fun onTouchEvent(event: MotionEvent): Boolean {
++        parent?.requestDisallowInterceptTouchEvent(true)
++        scaleDetector.onTouchEvent(event)
++        gestureDetector.onTouchEvent(event)
++        when (event.actionMasked) {
++            MotionEvent.ACTION_DOWN -> {
++                lastTouchX = event.x
++                lastTouchY = event.y
++            }
++            MotionEvent.ACTION_MOVE -> {
++                if (!scaleDetector.isInProgress && event.pointerCount == 1) {
++                    val dx = event.x - lastTouchX
++                    val dy = event.y - lastTouchY
++                    if (hypot(dx, dy) > dp(1.5f)) {
++                        offsetX += dx
++                        offsetY += dy
++                        invalidate()
++                    }
++                    lastTouchX = event.x
++                    lastTouchY = event.y
++                }
++            }
++            MotionEvent.ACTION_POINTER_UP -> {
++                // 双指缩放结束后剩下一根手指：把起点重置到剩余手指，避免下一帧跳一下
++                val upIndex = event.actionIndex
++                val remainIndex = if (upIndex == 0) 1 else 0
++                if (remainIndex < event.pointerCount) {
++                    lastTouchX = event.getX(remainIndex)
++                    lastTouchY = event.getY(remainIndex)
++                }
++            }
++            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
++                lastTouchX = event.x
++                lastTouchY = event.y
++            }
++        }
++        return true
++    }
++
++    private fun handleTap(x: Float, y: Float) {
++        val g = graph ?: return
++        val layout = positions ?: return
++        var best: ModGraph.Node? = null
++        var bestDistance = Float.MAX_VALUE
++        for (node in g.nodes) {
++            if (!isVisible(node)) continue
++            val i = layout.index[node.id] ?: continue
++            val sx = layout.x[i] * viewScale + offsetX
++            val sy = layout.y[i] * viewScale + offsetY
++            val radius = max(layout.radius[i] * viewScale, dp(14f))
++            val distance = hypot(x - sx, y - sy)
++            if (distance <= radius && distance < bestDistance) {
++                best = node
++                bestDistance = distance
++            }
++        }
++        selectNode(best?.id)
++    }
++
++    private fun isVisible(node: ModGraph.Node): Boolean {
++        return !(hideIsolated && node.isIsolated)
++    }
++
++    private fun inkColor(): Int = ThemeEngine.getInstance().getTheme().getColor2()
++
++    private fun accentColor(): Int = ThemeEngine.getInstance().getTheme().getColor()
++
++    private fun background(): Int = ContextCompat.getColor(context, R.color.dialog_background)
++
++    private fun alpha(color: Int, alpha: Float): Int {
++        val a = (alpha.coerceIn(0f, 1f) * 255f).toInt()
++        return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
++    }
++
++    override fun onDraw(canvas: Canvas) {
++        super.onDraw(canvas)
++        val g = graph ?: return
++        val layout = positions ?: return
++        val ink = inkColor()
++        val accent = accentColor()
++        val selected = selectedId?.let { g.getNode(it) }
++        val near: Set<String> = if (selected != null) {
++            buildSet {
++                add(selected.id)
++                selected.incoming.forEach { add(it.source.id) }
++                selected.outgoing.forEach { add(it.target.id) }
++            }
++        } else {
++            emptySet()
++        }
++
++        drawEdges(canvas, g, layout, ink, selected)
++        drawNodes(canvas, g, layout, ink, accent, selected, near)
++        drawLabels(canvas, g, layout, ink, accent, selected, near)
++    }
++
++    private fun drawEdges(
++        canvas: Canvas,
++        graph: ModGraph,
++        layout: ModGraphLayout.Result,
++        ink: Int,
++        selected: ModGraph.Node?
++    ) {
++        for (edge in graph.edges) {
++            if (!isVisible(edge.source) || !isVisible(edge.target)) continue
++            val a = layout.index[edge.source.id] ?: continue
++            val b = layout.index[edge.target.id] ?: continue
++            val sx = layout.x[a] * viewScale + offsetX
++            val sy = layout.y[a] * viewScale + offsetY
++            val tx = layout.x[b] * viewScale + offsetX
++            val ty = layout.y[b] * viewScale + offsetY
++            val sr = layout.radius[a] * viewScale
++            val tr = layout.radius[b] * viewScale
++            val dx = tx - sx
++            val dy = ty - sy
++            val distance = hypot(dx, dy)
++            if (distance < 1f) continue
++            val ux = dx / distance
++            val uy = dy / distance
++            val x1 = sx + ux * sr
++            val y1 = sy + uy * sr
++            val x2 = tx - ux * (tr + dp(3f))
++            val y2 = ty - uy * (tr + dp(3f))
++
++            val touchesSelection = selected != null &&
++                    (edge.source.id == selected.id || edge.target.id == selected.id)
++            val dim = selected != null && !touchesSelection
++            val color = when (edge.type) {
++                ModDependency.Type.INCOMPATIBLE -> 0xFFE05252.toInt()
++                else -> ink
++            }
++            edgePaint.color = alpha(color, when {
++                dim -> 0.06f
++                touchesSelection -> 0.95f
++                edge.type == ModDependency.Type.REQUIRED -> 0.42f
++                else -> 0.55f
++            })
++            edgePaint.strokeWidth = dp(if (touchesSelection) 1.8f else 1.1f)
++            edgePaint.pathEffect = when (edge.type) {
++                ModDependency.Type.REQUIRED -> null
++                ModDependency.Type.OPTIONAL -> optionalDash
++                ModDependency.Type.INCOMPATIBLE -> incompatibleDash
++                ModDependency.Type.EMBEDDED -> embeddedDash
++            }
++            canvas.drawLine(x1, y1, x2, y2, edgePaint)
++
++            if (viewScale >= 0.55f &&
++                (edge.type == ModDependency.Type.REQUIRED || edge.type == ModDependency.Type.INCOMPATIBLE)
++            ) {
++                val head = dp(4.5f)
++                arrowPath.reset()
++                arrowPath.moveTo(x2, y2)
++                arrowPath.lineTo(x2 - ux * head - uy * head * 0.55f, y2 - uy * head + ux * head * 0.55f)
++                arrowPath.lineTo(x2 - ux * head + uy * head * 0.55f, y2 - uy * head - ux * head * 0.55f)
++                arrowPath.close()
++                edgePaint.pathEffect = null
++                edgePaint.style = Paint.Style.FILL
++                canvas.drawPath(arrowPath, edgePaint)
++                edgePaint.style = Paint.Style.STROKE
++            }
++        }
++    }
++
++    private fun drawNodes(
++        canvas: Canvas,
++        graph: ModGraph,
++        layout: ModGraphLayout.Result,
++        ink: Int,
++        accent: Int,
++        selected: ModGraph.Node?,
++        near: Set<String>
++    ) {
++        for (node in graph.nodes) {
++            if (!isVisible(node)) continue
++            val i = layout.index[node.id] ?: continue
++            val sx = layout.x[i] * viewScale + offsetX
++            val sy = layout.y[i] * viewScale + offsetY
++            val radius = max(layout.radius[i] * viewScale, dp(3f))
++            val dim = selected != null && node.id != selected.id && node.id !in near
++            val category = categoryColorById[node.id]
++            val base = category ?: alpha(ink, if (node.isHub) 0.95f else 0.55f)
++
++            nodePaint.style = Paint.Style.FILL
++            nodePaint.color = when {
++                node.isMissing -> Color.TRANSPARENT
++                dim -> alpha(base, 0.15f)
++                !node.isActive -> alpha(base, 0.28f)
++                else -> base
++            }
++            canvas.drawCircle(sx, sy, radius, nodePaint)
++
++            strokePaint.color = when {
++                dim -> alpha(ink, 0.12f)
++                node.id == selectedId -> accent
++                node.isMissing -> alpha(ink, 0.9f)
++                node.isHub -> accent
++                !node.isActive -> alpha(ink, 0.45f)
++                else -> alpha(ink, 0.4f)
++            }
++            strokePaint.strokeWidth = when {
++                node.id == selectedId -> dp(2.4f)
++                node.isHub -> dp(1.8f)
++                else -> dp(1.0f)
++            }
++            strokePaint.pathEffect = when {
++                node.isMissing -> missingDash
++                !node.isActive -> disabledDash
++                else -> null
++            }
++            canvas.drawCircle(sx, sy, radius, strokePaint)
++        }
++    }
++
++    private fun drawLabels(
++        canvas: Canvas,
++        graph: ModGraph,
++        layout: ModGraphLayout.Result,
++        ink: Int,
++        accent: Int,
++        selected: ModGraph.Node?,
++        near: Set<String>
++    ) {
++        val placed = ArrayList<RectF>()
++        val ordered = graph.nodes.sortedByDescending { labelPriority(it) }
++        val bg = background()
++        var drawn = 0
++        for (node in ordered) {
++            if (drawn >= 80) break
++            if (!isVisible(node)) continue
++            if (selected != null && node.id != selected.id && node.id !in near) continue
++            val show = node.id == selectedId ||
++                    (node.isHub && viewScale >= 0.15f) ||
++                    (node.inDegree >= 2 && viewScale >= 0.45f) ||
++                    viewScale >= 0.85f
++            if (!show) continue
++            val i = layout.index[node.id] ?: continue
++            val sx = layout.x[i] * viewScale + offsetX
++            val sy = layout.y[i] * viewScale + offsetY
++            val sr = max(layout.radius[i] * viewScale, dp(3f))
++            val bold = node.isHub || node.id == selectedId
++            val textSize = dp(if (bold) 11.5f else 10.5f)
++            labelPaint.textSize = textSize
++            labelPaint.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
++            labelPaint.color = if (node.id == selectedId) accent else ink
++            labelStrokePaint.textSize = textSize
++            labelStrokePaint.typeface = labelPaint.typeface
++            labelStrokePaint.strokeWidth = dp(3f)
++            labelStrokePaint.color = bg
++
++            val text = labelOf(node)
++            val textWidth = labelPaint.measureText(text)
++            val textHeight = textSize
++            val candidates = arrayOf(
++                Triple(sx, sy + sr + textHeight * 1.15f, Paint.Align.CENTER),
++                Triple(sx, sy - sr - textHeight * 0.35f, Paint.Align.CENTER),
++                Triple(sx + sr + dp(4f), sy + textHeight * 0.35f, Paint.Align.LEFT),
++                Triple(sx - sr - dp(4f), sy + textHeight * 0.35f, Paint.Align.RIGHT)
++            )
++            var chosenX = 0f
++            var chosenY = 0f
++            var chosenAlign: Paint.Align? = null
++            var chosenRect: RectF? = null
++            for ((x, baseline, align) in candidates) {
++                val left = when (align) {
++                    Paint.Align.CENTER -> x - textWidth / 2f
++                    Paint.Align.LEFT -> x
++                    else -> x - textWidth
++                }
++                val rect = RectF(left, baseline - textHeight * 0.85f, left + textWidth, baseline + textHeight * 0.25f)
++                // 外扩 2dp：文字描边和 CJK 字形的实际高度都比测量值略大
++                val padded = RectF(rect)
++                padded.inset(-dp(2f), -dp(1f))
++                if (padded.left < 2f || padded.right > width - 2f ||
++                    padded.top < 2f || padded.bottom > height - 2f
++                ) {
++                    continue
++                }
++                if (placed.any { RectF.intersects(it, padded) }) {
++                    continue
++                }
++                chosenX = x
++                chosenY = baseline
++                chosenAlign = align
++                chosenRect = padded
++                break
++            }
++            if (chosenRect == null || chosenAlign == null) {
++                continue
++            }
++            labelPaint.textAlign = chosenAlign
++            labelStrokePaint.textAlign = chosenAlign
++            canvas.drawText(text, chosenX, chosenY, labelStrokePaint)
++            canvas.drawText(text, chosenX, chosenY, labelPaint)
++            placed.add(chosenRect)
++            drawn++
++        }
++    }
++
++    private fun labelPriority(node: ModGraph.Node): Int {
++        if (node.id == selectedId) return 10000
++        return (if (node.isHub) 5000 else 0) + node.inDegree * 10 + node.degree
++    }
++
++    private fun labelOf(node: ModGraph.Node): String {
++        val name = displayNameById[node.id] ?: node.name
++        return when {
++            node.isMissing -> context.getString(R.string.mods_graph_missing) + " · " + name
++            !node.isActive -> name + " (" + context.getString(R.string.mods_graph_disabled) + ")"
++            else -> name
++        }
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/LocalModFile.java b/FCL/src/main/java/com/tungsten/fclcore/mod/LocalModFile.java
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/LocalModFile.java	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/LocalModFile.java	2026-11-01 11:19:28.709999512 +0800
+@@ -44,6 +44,11 @@
+     private final String logoPath;
+     private final BooleanProperty activeProperty;
+     private RemoteMod.Version remoteVersion;
++    /**
++     * jar 元数据里声明的依赖（fabric.mod.json / quilt.mod.json / mods.toml）。
++     * 由各元数据解析器在构造后填充，图构建器只读取不修改。
++     */
++    private final List<ModDependency> dependencies = new ArrayList<>();
+ 
+     public LocalModFile(ModManager modManager, LocalMod mod, Path file, String name, Description description) {
+         this(modManager, mod, file, name, description, "", "", "", "", "");
+@@ -219,6 +224,29 @@
+         this.remoteVersion = remoteVersion;
+     }
+ 
++    /**
++     * 返回 jar 元数据声明的依赖列表（只读）。未解析出依赖的加载器返回空列表。
++     */
++    public List<ModDependency> getDependencies() {
++        return Collections.unmodifiableList(dependencies);
++    }
++
++    /**
++     * 由元数据解析器在构造完成后填充；传入 null 视为清空。
++     */
++    public void setDependencies(Collection<ModDependency> dependencies) {
++        this.dependencies.clear();
++        if (dependencies != null) {
++            this.dependencies.addAll(dependencies);
++        }
++    }
++
++    public void addDependency(ModDependency dependency) {
++        if (dependency != null) {
++            this.dependencies.add(dependency);
++        }
++    }
++
+     public static class ModUpdate {
+         private final LocalModFile localModFile;
+         private final RemoteMod.Version currentVersion;
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/ModDependency.java b/FCL/src/main/java/com/tungsten/fclcore/mod/ModDependency.java
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/ModDependency.java	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/ModDependency.java	2026-11-01 11:19:30.077999511 +0800
+@@ -0,0 +1,65 @@
++/*
++ * Hello Minecraft! Launcher
++ * Copyright (C) 2026  contributors
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
++ */
++package com.tungsten.fclcore.mod;
++
++import java.util.Locale;
++
++/**
++ * 一个模组在 jar 元数据里声明的依赖关系。
++ *
++ * <p>这里只描述“声明”，不保证目标已经安装。目标解析、缺失前置节点和度数统计
++ * 由 {@code com.tungsten.fclcore.mod.graph.ModGraphBuilder} 负责。</p>
++ *
++ * <p>模组 id 统一小写：Forge 的 modId 大小写不敏感，Fabric 规范本身要求小写，
++ * 玩家手动改过的 jar 偶尔会出现大小写混用，统一后才能和依赖声明对上。</p>
++ */
++public record ModDependency(String targetId, Type type, String versionRange) {
++
++    public enum Type {
++        /** 必需前置，缺失时游戏通常无法启动 */
++        REQUIRED,
++        /** 可选联动，目标缺失不影响启动 */
++        OPTIONAL,
++        /** 声明为不兼容 */
++        INCOMPATIBLE,
++        /** 内置（jar-in-jar）依赖 */
++        EMBEDDED
++    }
++
++    public ModDependency {
++        targetId = targetId == null ? "" : targetId.trim().toLowerCase(Locale.ROOT);
++        type = type == null ? Type.REQUIRED : type;
++        versionRange = versionRange == null ? "" : versionRange;
++    }
++
++    public static ModDependency required(String targetId, String versionRange) {
++        return new ModDependency(targetId, Type.REQUIRED, versionRange);
++    }
++
++    public static ModDependency optional(String targetId, String versionRange) {
++        return new ModDependency(targetId, Type.OPTIONAL, versionRange);
++    }
++
++    public static ModDependency incompatible(String targetId, String versionRange) {
++        return new ModDependency(targetId, Type.INCOMPATIBLE, versionRange);
++    }
++
++    public static ModDependency embedded(String targetId, String versionRange) {
++        return new ModDependency(targetId, Type.EMBEDDED, versionRange);
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraph.java b/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraph.java
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraph.java	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraph.java	2026-11-01 11:19:30.209999511 +0800
+@@ -0,0 +1,203 @@
++/*
++ * Hello Minecraft! Launcher
++ * Copyright (C) 2026  contributors
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
++ */
++package com.tungsten.fclcore.mod.graph;
++
++import com.tungsten.fclcore.mod.ModDependency;
++import com.tungsten.fclcore.mod.ModLoaderType;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++
++/**
++ * 一个实例的模组依赖图：节点是已安装（或缺失）的模组，边是 jar 元数据声明的依赖。
++ *
++ * <p>这个类只描述结构，不含任何 Android / UI 类型，可以在 JVM 单元测试里直接构造。</p>
++ */
++public final class ModGraph {
++
++    private static final int HUB_IN_DEGREE = 3;
++
++    public static final class Node {
++        private final String id;
++        private final String name;
++        private final String version;
++        private final String fileName;
++        private final ModLoaderType loaderType;
++        private final boolean active;
++        private final boolean missing;
++        private int inDegree;
++        private int outDegree;
++        private final List<Edge> outgoing = new ArrayList<>();
++        private final List<Edge> incoming = new ArrayList<>();
++
++        Node(String id, String name, String version, String fileName,
++             ModLoaderType loaderType, boolean active, boolean missing) {
++            this.id = id;
++            this.name = name == null || name.isBlank() ? id : name;
++            this.version = version == null ? "" : version;
++            this.fileName = fileName == null ? "" : fileName;
++            this.loaderType = loaderType == null ? ModLoaderType.UNKNOWN : loaderType;
++            this.active = active;
++            this.missing = missing;
++        }
++
++        public String getId() {
++            return id;
++        }
++
++        public String getName() {
++            return name;
++        }
++
++        public String getVersion() {
++            return version;
++        }
++
++        public String getFileName() {
++            return fileName;
++        }
++
++        public ModLoaderType getLoaderType() {
++            return loaderType;
++        }
++
++        /** 模组文件当前是否启用（缺失节点恒为 true，避免被当成“已禁用”）。 */
++        public boolean isActive() {
++            return active;
++        }
++
++        /** 依赖声明指向但实例里没有安装的模组。 */
++        public boolean isMissing() {
++            return missing;
++        }
++
++        public int getInDegree() {
++            return inDegree;
++        }
++
++        public int getOutDegree() {
++            return outDegree;
++        }
++
++        public int getDegree() {
++            return inDegree + outDegree;
++        }
++
++        /** 仅由 ModGraphBuilder 在装配阶段调用。 */
++        void addOutgoing(Edge edge) {
++            outgoing.add(edge);
++            outDegree++;
++        }
++
++        /** 仅由 ModGraphBuilder 在装配阶段调用。 */
++        void addIncoming(Edge edge) {
++            incoming.add(edge);
++            inDegree++;
++        }
++
++        /** 被至少 3 个模组依赖：通常是前置库或核心玩法模组。 */
++        public boolean isHub() {
++            return !missing && inDegree >= HUB_IN_DEGREE;
++        }
++
++        /** 没有任何依赖关系：玩家可能装了但没连上，值得检查。 */
++        public boolean isIsolated() {
++            return !missing && inDegree == 0 && outDegree == 0;
++        }
++
++        public List<Edge> getOutgoing() {
++            return Collections.unmodifiableList(outgoing);
++        }
++
++        public List<Edge> getIncoming() {
++            return Collections.unmodifiableList(incoming);
++        }
++
++        @Override
++        public String toString() {
++            return "Node{" + id + ", in=" + inDegree + ", out=" + outDegree + (missing ? ", missing" : "") + '}';
++        }
++    }
++
++    public static final class Edge {
++        private final Node source;
++        private final Node target;
++        private final ModDependency.Type type;
++
++        Edge(Node source, Node target, ModDependency.Type type) {
++            this.source = source;
++            this.target = target;
++            this.type = type;
++        }
++
++        public Node getSource() {
++            return source;
++        }
++
++        public Node getTarget() {
++            return target;
++        }
++
++        public ModDependency.Type getType() {
++            return type;
++        }
++    }
++
++    public record Stats(int nodes, int edges, int required, int optional, int incompatible,
++                        int embedded, int hubs, int isolated, int missing, int disabled) {
++    }
++
++    private final List<Node> nodes;
++    private final List<Edge> edges;
++    private final Stats stats;
++    private final Map<String, Node> nodeById;
++
++    ModGraph(List<Node> nodes, List<Edge> edges, Stats stats) {
++        this.nodes = Collections.unmodifiableList(nodes);
++        this.edges = Collections.unmodifiableList(edges);
++        this.stats = stats;
++        Map<String, Node> byId = new LinkedHashMap<>();
++        for (Node node : nodes) {
++            byId.put(node.getId(), node);
++        }
++        this.nodeById = Collections.unmodifiableMap(byId);
++    }
++
++    public List<Node> getNodes() {
++        return nodes;
++    }
++
++    public List<Edge> getEdges() {
++        return edges;
++    }
++
++    public Stats getStats() {
++        return stats;
++    }
++
++    public Node getNode(String id) {
++        return id == null ? null : nodeById.get(id);
++    }
++
++    public boolean isEmpty() {
++        return nodes.isEmpty();
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraphBuilder.java b/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraphBuilder.java
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraphBuilder.java	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/graph/ModGraphBuilder.java	2026-11-01 11:19:30.377999511 +0800
+@@ -0,0 +1,186 @@
++/*
++ * Hello Minecraft! Launcher
++ * Copyright (C) 2026  contributors
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
++ */
++package com.tungsten.fclcore.mod.graph;
++
++import com.tungsten.fclcore.mod.LocalModFile;
++import com.tungsten.fclcore.mod.ModDependency;
++import com.tungsten.fclcore.mod.ModLoaderType;
++
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.Set;
++
++/**
++ * 从实例里已解析的模组构建依赖图。
++ *
++ * <p>规则与 Modpack Studio 的图构建保持一致：</p>
++ * <ul>
++ *   <li>必需前置缺失 → 生成“缺失前置”节点；可选/冲突目标缺失 → 不画边</li>
++ *   <li>游戏、加载器本身不是模组，不建节点也不建边</li>
++ *   <li>同一 mod id 的多个文件（旧版本、启用/禁用副本）只保留一个，优先启用的那个</li>
++ *   <li>三元组 (source, target, type) 去重，避免同一依赖被重复声明</li>
++ * </ul>
++ */
++public final class ModGraphBuilder {
++
++    /**
++     * 这些 id 是游戏/加载器组件，不是可安装的模组。
++     * 注意不要把 fabric-api / fabric_api 放进来：它是真实模组，很多包会装。
++     */
++    private static final Set<String> BUILTIN_IDS = Set.of(
++            "minecraft", "java",
++            "forge", "neoforge", "cleanroom",
++            "fabricloader", "fabric-loader",
++            "quilt_loader", "quilt-loader",
++            "javafml", "lowcodefml",
++            "mixinextras", "mixin", "openloader"
++    );
++
++    private ModGraphBuilder() {
++    }
++
++    /**
++     * 图构建器的输入。与 LocalModFile 解耦，方便单元测试直接构造。
++     */
++    public record Input(String id, String name, String version, String fileName,
++                        ModLoaderType loaderType, boolean active,
++                        List<ModDependency> dependencies) {
++
++        public Input {
++            id = normalize(id);
++            name = name == null ? "" : name;
++            version = version == null ? "" : version;
++            fileName = fileName == null ? "" : fileName;
++            loaderType = loaderType == null ? ModLoaderType.UNKNOWN : loaderType;
++            dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
++        }
++
++        public static Input from(LocalModFile file) {
++            return new Input(file.getId(), file.getName(), file.getVersion(), file.getFileName(),
++                    file.getModLoaderType(), file.isActive(), file.getDependencies());
++        }
++    }
++
++    public static ModGraph build(Collection<Input> inputs) {
++        Map<String, Input> chosen = new LinkedHashMap<>();
++        if (inputs != null) {
++            for (Input input : inputs) {
++                if (input == null || input.id().isEmpty() || BUILTIN_IDS.contains(input.id())) {
++                    continue;
++                }
++                Input previous = chosen.get(input.id());
++                // 同一 mod id 可能有 .jar 和 .jar.disabled 两个文件；启用优先，否则保留先出现的
++                if (previous == null || (!previous.active() && input.active())) {
++                    chosen.put(input.id(), input);
++                }
++            }
++        }
++
++        Map<String, ModGraph.Node> nodes = new LinkedHashMap<>();
++        for (Input input : chosen.values()) {
++            nodes.put(input.id(), new ModGraph.Node(input.id(), input.name(), input.version(),
++                    input.fileName(), input.loaderType(), input.active(), false));
++        }
++
++        List<ModGraph.Edge> edges = new ArrayList<>();
++        Set<String> edgeKeys = new HashSet<>();
++
++        for (Input input : chosen.values()) {
++            ModGraph.Node source = nodes.get(input.id());
++            if (source == null) {
++                continue;
++            }
++            for (ModDependency dependency : input.dependencies()) {
++                if (dependency == null) {
++                    continue;
++                }
++                String targetId = dependency.targetId();
++                if (targetId.isEmpty() || targetId.equals(source.getId())) {
++                    continue;
++                }
++                if (BUILTIN_IDS.contains(targetId)) {
++                    continue;
++                }
++
++                ModGraph.Node target = nodes.get(targetId);
++                if (target == null) {
++                    if (dependency.type() != ModDependency.Type.REQUIRED) {
++                        continue;
++                    }
++                    target = new ModGraph.Node(targetId, targetId, "", "",
++                            ModLoaderType.UNKNOWN, true, true);
++                    nodes.put(targetId, target);
++                }
++
++                String key = source.getId() + '\u0000' + target.getId() + '\u0000' + dependency.type().name();
++                if (!edgeKeys.add(key)) {
++                    continue;
++                }
++                ModGraph.Edge edge = new ModGraph.Edge(source, target, dependency.type());
++                edges.add(edge);
++                source.addOutgoing(edge);
++                target.addIncoming(edge);
++            }
++        }
++
++        List<ModGraph.Node> nodeList = new ArrayList<>(nodes.values());
++        int required = 0;
++        int optional = 0;
++        int incompatible = 0;
++        int embedded = 0;
++        for (ModGraph.Edge edge : edges) {
++            switch (edge.getType()) {
++                case REQUIRED -> required++;
++                case OPTIONAL -> optional++;
++                case INCOMPATIBLE -> incompatible++;
++                case EMBEDDED -> embedded++;
++            }
++        }
++        int hubs = 0;
++        int isolated = 0;
++        int missing = 0;
++        int disabled = 0;
++        for (ModGraph.Node node : nodeList) {
++            if (node.isHub()) {
++                hubs++;
++            }
++            if (node.isIsolated()) {
++                isolated++;
++            }
++            if (node.isMissing()) {
++                missing++;
++            }
++            if (!node.isActive() && !node.isMissing()) {
++                disabled++;
++            }
++        }
++
++        ModGraph.Stats stats = new ModGraph.Stats(nodeList.size(), edges.size(), required, optional,
++                incompatible, embedded, hubs, isolated, missing, disabled);
++        return new ModGraph(nodeList, edges, stats);
++    }
++
++    static String normalize(String id) {
++        return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/FabricModMetadata.kt b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/FabricModMetadata.kt
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/FabricModMetadata.kt	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/FabricModMetadata.kt	2026-11-01 11:19:28.885999512 +0800
+@@ -3,6 +3,7 @@
+ package com.tungsten.fclcore.mod.modinfo
+ 
+ import com.tungsten.fclcore.mod.LocalModFile
++import com.tungsten.fclcore.mod.ModDependency
+ import com.tungsten.fclcore.mod.ModLoaderType
+ import com.tungsten.fclcore.mod.ModManager
+ import kotlinx.serialization.KSerializer
+@@ -30,7 +31,19 @@
+     val description: String = "",
+     @Serializable(with = FabricModAuthorListSerializer::class)
+     val authors: List<FabricModAuthor> = emptyList(),
+-    val contact: Map<String, String> = emptyMap()
++    val contact: Map<String, String> = emptyMap(),
++    /** 必需前置：mod id -> 版本范围 */
++    @Serializable(with = LenientStringMapSerializer::class)
++    val depends: Map<String, String> = emptyMap(),
++    /** 可选联动：mod id -> 版本范围 */
++    @Serializable(with = LenientStringMapSerializer::class)
++    val recommends: Map<String, String> = emptyMap(),
++    /** 声明为不兼容：mod id -> 版本范围 */
++    @Serializable(with = LenientStringMapSerializer::class)
++    val breaks: Map<String, String> = emptyMap(),
++    /** 老版本 fabric.mod.json 也用过 conflicts 这个名字 */
++    @Serializable(with = LenientStringMapSerializer::class)
++    val conflicts: Map<String, String> = emptyMap()
+ ) {
+     companion object {
+         @JvmStatic
+@@ -41,11 +54,26 @@
+                 throw IOException("File $modFile is not a Fabric mod.")
+             val metadata: FabricModMetadata = MOD_METADATA_JSON.decodeFromString(FileUtils.readText(mcmod))
+             val authors = metadata.authors.joinToString(", ") { it.name }
+-            return LocalModFile(
++            val file = LocalModFile(
+                 modManager, modManager.getLocalMod(metadata.id, ModLoaderType.FABRIC), modFile,
+                 metadata.name, LocalModFile.Description(metadata.description),
+                 authors, metadata.version, "", metadata.contact["homepage"] ?: "", metadata.icon
+             )
++            file.setDependencies(dependenciesOf(metadata))
++            return file
++        }
++
++        /**
++         * 把 fabric.mod.json 的依赖声明转换成统一模型。纯函数，便于单元测试。
++         */
++        @JvmStatic
++        fun dependenciesOf(metadata: FabricModMetadata): List<ModDependency> {
++            val out = ArrayList<ModDependency>()
++            metadata.depends.forEach { (id, range) -> out.add(ModDependency.required(id, range)) }
++            metadata.recommends.forEach { (id, range) -> out.add(ModDependency.optional(id, range)) }
++            metadata.breaks.forEach { (id, range) -> out.add(ModDependency.incompatible(id, range)) }
++            metadata.conflicts.forEach { (id, range) -> out.add(ModDependency.incompatible(id, range)) }
++            return out
+         }
+     }
+ }
+@@ -74,3 +102,34 @@
+ }
+ 
+ internal object FabricModAuthorListSerializer : KSerializer<List<FabricModAuthor>> by ListSerializer(FabricModAuthorSerializer)
++
++/**
++ * 依赖表按规范是 {"modId": "版本范围"} 对象；但手改过的 jar 也可能写成数组或字符串。
++ * 这里只接受对象，其它形态一律当空表——不能因为一个依赖字段写坏就让整个模组解析失败。
++ */
++internal object LenientStringMapSerializer : KSerializer<Map<String, String>> {
++    private val elementSerializer = JsonElement.serializer()
++
++    override val descriptor: SerialDescriptor = elementSerializer.descriptor
++
++    override fun deserialize(decoder: Decoder): Map<String, String> {
++        val element = decoder.decodeSerializableValue(elementSerializer)
++        if (element !is JsonObject) return emptyMap()
++        val out = LinkedHashMap<String, String>()
++        for ((key, value) in element) {
++            out[key] = when (value) {
++                is JsonPrimitive -> value.content
++                else -> value.toString()
++            }
++        }
++        return out
++    }
++
++    override fun serialize(encoder: Encoder, value: Map<String, String>) {
++        val json = LinkedHashMap<String, JsonElement>()
++        for ((key, item) in value) {
++            json[key] = JsonPrimitive(item)
++        }
++        encoder.encodeSerializableValue(elementSerializer, JsonObject(json))
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeNewModMetadata.kt b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeNewModMetadata.kt
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeNewModMetadata.kt	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeNewModMetadata.kt	2026-11-01 11:19:29.029999512 +0800
+@@ -3,6 +3,7 @@
+ package com.tungsten.fclcore.mod.modinfo
+ 
+ import com.tungsten.fclcore.mod.LocalModFile
++import com.tungsten.fclcore.mod.ModDependency
+ import com.tungsten.fclcore.mod.ModLoaderType
+ import com.tungsten.fclcore.mod.ModManager
+ import com.tungsten.fclcore.util.Logging
+@@ -125,7 +126,7 @@
+ 
+             val type = analyzeLoader(tomlParseResult, mod.modId, modLoaderType)
+ 
+-            return LocalModFile(
++            val file = LocalModFile(
+                 modManager, modManager.getLocalMod(mod.modId, type), modFile, mod.displayName,
+                 LocalModFile.Description(mod.description), mod.authors,
+                 if (jarVersion != null) mod.version.replace("\${file.jarVersion}", jarVersion) else mod.version,
+@@ -133,6 +134,68 @@
+                 mod.displayURL,
+                 metadata.logoFile
+             )
++            file.setDependencies(dependenciesOf(tomlParseResult, mod.modId))
++            return file
++        }
++
++        /**
++         * 把 mods.toml 中属于 [ownerId] 的依赖转换成统一模型。
++         *
++         * 直接从 TomlParseResult 读，而不是塞进 @Serializable 数据类：社区里存在
++         * `[[dependencies]]`（无 owner 分组）这种非标准写法，如果把它声明成
++         * Map<String, List<...>>，整个 metadata 的反序列化会失败，连模组都识别不出来。
++         * 这里像 analyzeLoader 一样逐种形态尝试，读不到就当没有依赖。
++         *
++         * Forge 1.13+ 用 mandatory=false 表示可选；NeoForge 还会写 type="optional" /
++         * type="incompatible"。两者同时存在时 type 优先。
++         */
++        @JvmStatic
++        fun dependenciesOf(toml: TomlParseResult, ownerId: String): List<ModDependency> {
++            val tables = ArrayList<TomlTable>()
++            fun addAll(array: org.tomlj.TomlArray?) {
++                if (array == null) return
++                for (i in 0 until array.size()) {
++                    val item = array.get(i)
++                    if (item is TomlTable) tables.add(item)
++                }
++            }
++            try {
++                addAll(toml.getArray("dependencies.$ownerId"))
++            } catch (ignored: Exception) {
++            }
++            if (tables.isEmpty()) {
++                try {
++                    addAll(toml.getArray("dependencies"))
++                } catch (ignored: Exception) {
++                }
++            }
++            if (tables.isEmpty()) {
++                try {
++                    addAll(toml.getTable("dependencies")?.getArray(ownerId))
++                } catch (ignored: Exception) {
++                }
++            }
++
++            val out = ArrayList<ModDependency>()
++            for (table in tables) {
++                try {
++                    val target = table.getString("modId") ?: continue
++                    if (target.isBlank()) continue
++                    val type = table.getString("type") ?: ""
++                    val mandatory = table.getBoolean("mandatory") ?: true
++                    val range = table.getString("versionRange") ?: ""
++                    val depType = when {
++                        type.equals("incompatible", ignoreCase = true) -> ModDependency.Type.INCOMPATIBLE
++                        type.equals("optional", ignoreCase = true) -> ModDependency.Type.OPTIONAL
++                        !mandatory -> ModDependency.Type.OPTIONAL
++                        else -> ModDependency.Type.REQUIRED
++                    }
++                    out.add(ModDependency(target, depType, range))
++                } catch (ignored: Exception) {
++                    // 单条依赖字段类型不对就算了，不能拖垮整个模组
++                }
++            }
++            return out
+         }
+ 
+         private fun fromEmbeddedMod(
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeOldModMetadata.kt b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeOldModMetadata.kt
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeOldModMetadata.kt	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/ForgeOldModMetadata.kt	2026-11-01 11:19:29.157999511 +0800
+@@ -3,12 +3,19 @@
+ package com.tungsten.fclcore.mod.modinfo
+ 
+ import com.tungsten.fclcore.mod.LocalModFile
++import com.tungsten.fclcore.mod.ModDependency
+ import com.tungsten.fclcore.mod.ModLoaderType
+ import com.tungsten.fclcore.mod.ModManager
+ import com.tungsten.fclcore.util.StringUtils
+ import com.tungsten.fclcore.util.io.FileUtils
++import kotlinx.serialization.KSerializer
+ import kotlinx.serialization.Serializable
++import kotlinx.serialization.descriptors.SerialDescriptor
++import kotlinx.serialization.encoding.Decoder
++import kotlinx.serialization.encoding.Encoder
+ import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonElement
++import kotlinx.serialization.json.JsonPrimitive
+ import kotlinx.serialization.json.decodeFromJsonElement
+ import java.io.IOException
+ import java.nio.file.FileSystem
+@@ -28,7 +35,10 @@
+     val updateUrl: String = "",
+     val credits: String = "",
+     val authorList: List<String> = emptyList(),
+-    val authors: List<String> = emptyList()
++    val authors: List<String> = emptyList(),
++    /** 老版本 mcmod.info 偶尔会写 dependencies，只包含 mod id，没有版本范围 */
++    @Serializable(with = LenientStringListSerializer::class)
++    val dependencies: List<String> = emptyList()
+ ) {
+     companion object {
+         @JvmStatic
+@@ -53,13 +63,40 @@
+             if (authors.isBlank())
+                 authors = metadata.credits
+ 
+-            return LocalModFile(
++            val file = LocalModFile(
+                 modManager, modManager.getLocalMod(metadata.modid, ModLoaderType.FORGE), modFile,
+                 metadata.name, LocalModFile.Description(metadata.description),
+                 authors, metadata.version, metadata.mcversion,
+                 if (metadata.url.isBlank()) metadata.updateUrl else metadata.url,
+                 metadata.logoFile
+             )
++            file.setDependencies(metadata.dependencies.map { ModDependency.required(it, "") })
++            return file
+         }
+     }
+ }
++
++/**
++ * mcmod.info 的 dependencies 通常是字符串数组，手写文件也可能只有一个字符串。
++ * 非字符串元素直接忽略，不能因为依赖字段写坏就让整个模组解析失败。
++ */
++internal object LenientStringListSerializer : KSerializer<List<String>> {
++    private val elementSerializer = JsonElement.serializer()
++
++    override val descriptor: SerialDescriptor = elementSerializer.descriptor
++
++    override fun deserialize(decoder: Decoder): List<String> {
++        return when (val element = decoder.decodeSerializableValue(elementSerializer)) {
++            is JsonPrimitive -> listOf(element.content)
++            is JsonArray -> element.mapNotNull { (it as? JsonPrimitive)?.content }
++            else -> emptyList()
++        }
++    }
++
++    override fun serialize(encoder: Encoder, value: List<String>) {
++        encoder.encodeSerializableValue(
++            elementSerializer,
++            JsonArray(value.map { JsonPrimitive(it) })
++        )
++    }
++}
+diff -ruN a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/QuiltModMetadata.kt b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/QuiltModMetadata.kt
+--- a/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/QuiltModMetadata.kt	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/java/com/tungsten/fclcore/mod/modinfo/QuiltModMetadata.kt	2026-11-01 11:19:29.317999511 +0800
+@@ -3,11 +3,17 @@
+ package com.tungsten.fclcore.mod.modinfo
+ 
+ import com.tungsten.fclcore.mod.LocalModFile
++import com.tungsten.fclcore.mod.ModDependency
+ import com.tungsten.fclcore.mod.ModLoaderType
+ import com.tungsten.fclcore.mod.ModManager
++import kotlinx.serialization.KSerializer
+ import kotlinx.serialization.SerialName
+ import kotlinx.serialization.Serializable
++import kotlinx.serialization.descriptors.SerialDescriptor
++import kotlinx.serialization.encoding.Decoder
++import kotlinx.serialization.encoding.Encoder
+ import kotlinx.serialization.json.JsonElement
++import kotlinx.serialization.json.JsonObject
+ import kotlinx.serialization.json.JsonPrimitive
+ import kotlinx.serialization.json.jsonPrimitive
+ import com.tungsten.fclcore.util.io.FileUtils
+@@ -40,7 +46,7 @@
+             val contributors = metadata.contributors.entries.joinToString(", ") { (name, value) ->
+                 "$name (${value.jsonPrimitive.content})"
+             }
+-            return LocalModFile(
++            val file = LocalModFile(
+                 modManager,
+                 modManager.getLocalMod(loader.id, ModLoaderType.QUILT),
+                 modFile,
+@@ -52,6 +58,21 @@
+                 (metadata.contact["homepage"] as? JsonPrimitive)?.content ?: "",
+                 metadata.icon
+             )
++            file.setDependencies(dependenciesOf(loader))
++            return file
++        }
++
++        /**
++         * 把 quilt.mod.json 的依赖声明转换成统一模型。
++         * Quilt 的 depends/recommends/breaks 是数组，元素可以是字符串或 {id, versions} 对象。
++         */
++        @JvmStatic
++        fun dependenciesOf(loader: QuiltLoader): List<ModDependency> {
++            val out = ArrayList<ModDependency>()
++            loader.depends.forEach { out.add(ModDependency.required(it.id, it.versions)) }
++            loader.recommends.forEach { out.add(ModDependency.optional(it.id, it.versions)) }
++            loader.breaks.forEach { out.add(ModDependency.incompatible(it.id, it.versions)) }
++            return out
+         }
+     }
+ }
+@@ -60,9 +81,47 @@
+ data class QuiltLoader(
+     val id: String = "",
+     val version: String = "",
+-    val metadata: QuiltMetadata = QuiltMetadata()
++    val metadata: QuiltMetadata = QuiltMetadata(),
++    val depends: List<QuiltDependency> = emptyList(),
++    val recommends: List<QuiltDependency> = emptyList(),
++    val breaks: List<QuiltDependency> = emptyList()
++)
++
++/**
++ * Quilt 依赖声明。规范里通常是 {"id": "...", "versions": "..."}，
++ * 但社区模组也出现过直接写字符串的简写，两种都要能读。
++ */
++@Serializable(with = QuiltDependencySerializer::class)
++data class QuiltDependency(
++    val id: String = "",
++    val versions: String = ""
+ )
+ 
++internal object QuiltDependencySerializer : KSerializer<QuiltDependency> {
++    private val elementSerializer = JsonElement.serializer()
++
++    override val descriptor: SerialDescriptor = elementSerializer.descriptor
++
++    override fun deserialize(decoder: Decoder): QuiltDependency {
++        return when (val element = decoder.decodeSerializableValue(elementSerializer)) {
++            is JsonPrimitive -> QuiltDependency(element.content, "")
++            is JsonObject -> QuiltDependency(
++                (element["id"] as? JsonPrimitive)?.content ?: "",
++                when (val versions = element["versions"]) {
++                    is JsonPrimitive -> versions.content
++                    null -> ""
++                    else -> versions.toString()
++                }
++            )
++            else -> QuiltDependency()
++        }
++    }
++
++    override fun serialize(encoder: Encoder, value: QuiltDependency) {
++        encoder.encodeSerializableValue(elementSerializer, JsonPrimitive(value.id))
++    }
++}
++
+ @Serializable
+ data class QuiltMetadata(
+     val name: String = "",
+diff -ruN a/FCL/src/main/res/layout/dialog_mod_graph.xml b/FCL/src/main/res/layout/dialog_mod_graph.xml
+--- a/FCL/src/main/res/layout/dialog_mod_graph.xml	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/res/layout/dialog_mod_graph.xml	2026-11-01 11:19:31.021999511 +0800
+@@ -0,0 +1,174 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:padding="12dp">
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:gravity="center_vertical"
++        android:orientation="horizontal">
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/title"
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="@string/mods_graph_title"
++            android:textSize="18sp"
++            android:textStyle="bold"
++            app:auto_text_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLImageButton
++            android:id="@+id/close"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:contentDescription="@string/button_cancel"
++            android:src="@drawable/ic_baseline_close_24"
++            app:auto_tint="true" />
++    </LinearLayout>
++
++    <com.tungsten.fcllibrary.component.view.FCLTextView
++        android:id="@+id/summary"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="2dp"
++        android:textSize="12sp"
++        app:auto_text_tint="true" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="4dp"
++        android:orientation="horizontal">
++
++        <com.tungsten.fcllibrary.component.view.FCLCheckBox
++            android:id="@+id/hide_isolated"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:text="@string/mods_graph_hide_isolated"
++            app:auto_hint_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLCheckBox
++            android:id="@+id/online"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="10dp"
++            android:checked="true"
++            android:text="@string/mods_graph_online"
++            app:auto_hint_tint="true" />
++    </LinearLayout>
++
++    <com.tungsten.fcllibrary.component.view.FCLTextView
++        android:id="@+id/online_status"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="2dp"
++        android:textSize="11sp"
++        android:visibility="gone"
++        app:auto_text_tint="true" />
++
++    <FrameLayout
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_marginTop="4dp"
++        android:layout_weight="1">
++
++        <com.tungsten.fcl.ui.manage.graph.ModGraphView
++            android:id="@+id/graph_view"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent" />
++
++        <com.tungsten.fcllibrary.component.view.FCLProgressBar
++            android:id="@+id/progress"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:indeterminate="true"
++            android:visibility="gone" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/empty"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:gravity="center"
++            android:text="@string/mods_graph_empty"
++            android:textSize="13sp"
++            android:visibility="gone"
++            app:auto_text_tint="true" />
++    </FrameLayout>
++
++    <HorizontalScrollView
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="2dp"
++        android:scrollbars="none">
++
++        <LinearLayout
++            android:id="@+id/legend"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:gravity="center_vertical"
++            android:orientation="horizontal" />
++    </HorizontalScrollView>
++
++    <LinearLayout
++        android:id="@+id/detail"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="4dp"
++        android:background="@drawable/bg_container_white"
++        android:orientation="vertical"
++        android:padding="8dp">
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/detail_name"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:singleLine="true"
++            android:text="@string/mods_graph_no_selection"
++            android:textSize="14sp"
++            android:textStyle="bold"
++            app:auto_text_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/detail_meta"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:textSize="11sp"
++            app:auto_text_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/detail_deps"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="4dp"
++            android:maxLines="2"
++            android:ellipsize="end"
++            android:textSize="11sp"
++            app:auto_text_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/detail_dependents"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:maxLines="2"
++            android:ellipsize="end"
++            android:textSize="11sp"
++            app:auto_text_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/detail_status"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:textSize="11sp"
++            app:auto_text_tint="true" />
++    </LinearLayout>
++</LinearLayout>
+diff -ruN a/FCL/src/main/res/layout/page_manage_mod.xml b/FCL/src/main/res/layout/page_manage_mod.xml
+--- a/FCL/src/main/res/layout/page_manage_mod.xml	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/res/layout/page_manage_mod.xml	2026-11-01 11:19:29.621999511 +0800
+@@ -79,6 +79,14 @@
+                     app:ripple="true" />
+ 
+                 <com.tungsten.fcllibrary.component.view.FCLButton
++                    android:id="@+id/graph"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="10dp"
++                    android:text="@string/mods_graph"
++                    app:ripple="true" />
++
++                <com.tungsten.fcllibrary.component.view.FCLButton
+                     android:id="@+id/sort"
+                     android:layout_width="match_parent"
+                     android:layout_height="wrap_content"
+@@ -181,11 +189,25 @@
+                     android:singleLine="true"
+                     android:textSize="14sp"
+                     app:auto_edit_tint="true"
+-                    app:layout_constraintBottom_toBottomOf="parent"
+                     app:layout_constraintEnd_toEndOf="parent"
+                     app:layout_constraintStart_toStartOf="parent"
+                     app:layout_constraintTop_toTopOf="parent" />
+ 
++                <com.tungsten.fcllibrary.component.view.FCLTextView
++                    android:id="@+id/graph_summary"
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="2dp"
++                    android:ellipsize="end"
++                    android:singleLine="true"
++                    android:textSize="11sp"
++                    android:visibility="gone"
++                    app:auto_text_tint="true"
++                    app:layout_constraintBottom_toBottomOf="parent"
++                    app:layout_constraintEnd_toEndOf="parent"
++                    app:layout_constraintStart_toStartOf="parent"
++                    app:layout_constraintTop_toBottomOf="@id/search_filter" />
++
+             </androidx.constraintlayout.widget.ConstraintLayout>
+ 
+             <com.tungsten.fcllibrary.component.view.FCLProgressBar
+diff -ruN a/FCL/src/main/res/layout-land/dialog_mod_graph.xml b/FCL/src/main/res/layout-land/dialog_mod_graph.xml
+--- a/FCL/src/main/res/layout-land/dialog_mod_graph.xml	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/main/res/layout-land/dialog_mod_graph.xml	2026-11-01 11:19:31.153999511 +0800
+@@ -0,0 +1,177 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:baselineAligned="false"
++    android:orientation="horizontal"
++    android:padding="12dp">
++
++    <FrameLayout
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_weight="1">
++
++        <com.tungsten.fcl.ui.manage.graph.ModGraphView
++            android:id="@+id/graph_view"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent" />
++
++        <com.tungsten.fcllibrary.component.view.FCLProgressBar
++            android:id="@+id/progress"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:indeterminate="true"
++            android:visibility="gone" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/empty"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_gravity="center"
++            android:gravity="center"
++            android:text="@string/mods_graph_empty"
++            android:textSize="13sp"
++            android:visibility="gone"
++            app:auto_text_tint="true" />
++    </FrameLayout>
++
++    <LinearLayout
++        android:layout_width="300dp"
++        android:layout_height="match_parent"
++        android:layout_marginStart="12dp"
++        android:orientation="vertical">
++
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:gravity="center_vertical"
++            android:orientation="horizontal">
++
++            <com.tungsten.fcllibrary.component.view.FCLTextView
++                android:id="@+id/title"
++                android:layout_width="0dp"
++                android:layout_height="wrap_content"
++                android:layout_weight="1"
++                android:text="@string/mods_graph_title"
++                android:textSize="17sp"
++                android:textStyle="bold"
++                app:auto_text_tint="true" />
++
++            <com.tungsten.fcllibrary.component.view.FCLImageButton
++                android:id="@+id/close"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:contentDescription="@string/button_cancel"
++                android:src="@drawable/ic_baseline_close_24"
++                app:auto_tint="true" />
++        </LinearLayout>
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/summary"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:textSize="12sp"
++            app:auto_text_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLCheckBox
++            android:id="@+id/hide_isolated"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:text="@string/mods_graph_hide_isolated"
++            app:auto_hint_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLCheckBox
++            android:id="@+id/online"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:checked="true"
++            android:text="@string/mods_graph_online"
++            app:auto_hint_tint="true" />
++
++        <com.tungsten.fcllibrary.component.view.FCLTextView
++            android:id="@+id/online_status"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:textSize="11sp"
++            android:visibility="gone"
++            app:auto_text_tint="true" />
++
++        <HorizontalScrollView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:scrollbars="none">
++
++            <LinearLayout
++                android:id="@+id/legend"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:gravity="center_vertical"
++                android:orientation="horizontal" />
++        </HorizontalScrollView>
++
++        <View
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_weight="1" />
++
++        <LinearLayout
++            android:id="@+id/detail"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:background="@drawable/bg_container_white"
++            android:orientation="vertical"
++            android:padding="8dp">
++
++            <com.tungsten.fcllibrary.component.view.FCLTextView
++                android:id="@+id/detail_name"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:singleLine="true"
++                android:text="@string/mods_graph_no_selection"
++                android:textSize="13sp"
++                android:textStyle="bold"
++                app:auto_text_tint="true" />
++
++            <com.tungsten.fcllibrary.component.view.FCLTextView
++                android:id="@+id/detail_meta"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="2dp"
++                android:textSize="11sp"
++                app:auto_text_tint="true" />
++
++            <com.tungsten.fcllibrary.component.view.FCLTextView
++                android:id="@+id/detail_deps"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="3dp"
++                android:ellipsize="end"
++                android:maxLines="2"
++                android:textSize="11sp"
++                app:auto_text_tint="true" />
++
++            <com.tungsten.fcllibrary.component.view.FCLTextView
++                android:id="@+id/detail_dependents"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="2dp"
++                android:ellipsize="end"
++                android:maxLines="2"
++                android:textSize="11sp"
++                app:auto_text_tint="true" />
++
++            <com.tungsten.fcllibrary.component.view.FCLTextView
++                android:id="@+id/detail_status"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="2dp"
++                android:textSize="11sp"
++                app:auto_text_tint="true" />
++        </LinearLayout>
++    </LinearLayout>
++</LinearLayout>
+diff -ruN a/FCL/src/main/res/values/strings.xml b/FCL/src/main/res/values/strings.xml
+--- a/FCL/src/main/res/values/strings.xml	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/res/values/strings.xml	2026-11-01 11:19:29.733999511 +0800
+@@ -948,6 +948,30 @@
+     <string name="mods_download_recommend">Recommended Mod Version - Minecraft %1s</string>
+     <string name="mods_enable">Enable</string>
+     <string name="mods_manage">Manage Mods</string>
++    <string name="mods_graph">Relationship Map</string>
++    <string name="mods_graph_title">Mod Relationship Map</string>
++    <string name="mods_graph_summary">%1$d mods · %2$d links · %3$d hubs · %4$d isolated · %5$d missing</string>
++    <string name="mods_graph_hide_isolated">Hide isolated</string>
++    <string name="mods_graph_online">Enrich from Modrinth</string>
++    <string name="mods_graph_empty">No mods with dependency information</string>
++    <string name="mods_graph_no_selection">Tap a node to see its dependencies</string>
++    <string name="mods_graph_direct_deps">Requires</string>
++    <string name="mods_graph_dependents">Required by</string>
++    <string name="mods_graph_missing">Missing dependency</string>
++    <string name="mods_graph_disabled">Disabled</string>
++    <string name="mods_graph_hub">Hub</string>
++    <string name="mods_graph_isolated">Isolated</string>
++    <string name="mods_graph_uncategorized">Uncategorized</string>
++    <string name="mods_graph_no_deps">none</string>
++    <string name="mods_graph_online_progress">Modrinth lookup %1$d/%2$d</string>
++    <string name="mods_graph_online_done">Modrinth matched %1$d/%2$d</string>
++    <string name="mods_graph_online_failed">Modrinth lookup failed; showing local data</string>
++    <string name="mods_graph_legend_required">Required</string>
++    <string name="mods_graph_legend_optional">Optional</string>
++    <string name="mods_graph_legend_incompatible">Incompatible</string>
++    <string name="mods_graph_legend_missing">Missing</string>
++    <string name="mods_graph_legend_disabled">Disabled</string>
++    <string name="mods_graph_zoom_hint">Pinch to zoom · drag to pan · tap a node</string>
+     <string name="mods_mcbbs">MCBBS</string>
+     <string name="mods_mcmod">MCMOD</string>
+     <string name="mods_mcmod_page">MCMOD Page</string>
+diff -ruN a/FCL/src/main/res/values-zh/strings.xml b/FCL/src/main/res/values-zh/strings.xml
+--- a/FCL/src/main/res/values-zh/strings.xml	2026-10-22 16:37:35.000000000 +0800
++++ b/FCL/src/main/res/values-zh/strings.xml	2026-11-01 11:19:29.949999511 +0800
+@@ -846,6 +846,30 @@
+     <string name="mods_download_recommend">推荐版本 - Minecraft %1s</string>
+     <string name="mods_enable">启用</string>
+     <string name="mods_manage">管理模组</string>
++    <string name="mods_graph">关系图</string>
++    <string name="mods_graph_title">模组关系图</string>
++    <string name="mods_graph_summary">%1$d 个模组 · %2$d 条关系 · %3$d 枢纽 · %4$d 孤立 · %5$d 缺失前置</string>
++    <string name="mods_graph_hide_isolated">隐藏孤立</string>
++    <string name="mods_graph_online">Modrinth 补全</string>
++    <string name="mods_graph_empty">没有带依赖信息的模组</string>
++    <string name="mods_graph_no_selection">点击节点查看它的依赖关系</string>
++    <string name="mods_graph_direct_deps">前置</string>
++    <string name="mods_graph_dependents">被依赖</string>
++    <string name="mods_graph_missing">缺失前置</string>
++    <string name="mods_graph_disabled">已禁用</string>
++    <string name="mods_graph_hub">枢纽</string>
++    <string name="mods_graph_isolated">孤立</string>
++    <string name="mods_graph_uncategorized">未分类</string>
++    <string name="mods_graph_no_deps">无</string>
++    <string name="mods_graph_online_progress">Modrinth 查询 %1$d/%2$d</string>
++    <string name="mods_graph_online_done">Modrinth 匹配 %1$d/%2$d</string>
++    <string name="mods_graph_online_failed">Modrinth 查询失败，仅显示本地数据</string>
++    <string name="mods_graph_legend_required">必需</string>
++    <string name="mods_graph_legend_optional">可选</string>
++    <string name="mods_graph_legend_incompatible">冲突</string>
++    <string name="mods_graph_legend_missing">缺失</string>
++    <string name="mods_graph_legend_disabled">已禁用</string>
++    <string name="mods_graph_zoom_hint">双指缩放 · 拖动平移 · 点击节点</string>
+     <string name="mods_mcbbs">MCBBS</string>
+     <string name="mods_mcmod">MCMOD</string>
+     <string name="mods_mcmod_page">MCMOD 页面</string>
+diff -ruN a/FCL/src/test/java/com/tungsten/fclcore/mod/graph/ModGraphBuilderTest.java b/FCL/src/test/java/com/tungsten/fclcore/mod/graph/ModGraphBuilderTest.java
+--- a/FCL/src/test/java/com/tungsten/fclcore/mod/graph/ModGraphBuilderTest.java	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/test/java/com/tungsten/fclcore/mod/graph/ModGraphBuilderTest.java	2026-11-01 11:19:31.249999511 +0800
+@@ -0,0 +1,156 @@
++package com.tungsten.fclcore.mod.graph;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertNotNull;
++import static org.junit.Assert.assertNull;
++import static org.junit.Assert.assertTrue;
++
++import com.tungsten.fclcore.mod.ModDependency;
++import com.tungsten.fclcore.mod.ModLoaderType;
++
++import org.junit.Test;
++
++import java.util.Arrays;
++import java.util.List;
++
++public class ModGraphBuilderTest {
++
++    private static ModGraphBuilder.Input mod(String id, boolean active, ModDependency... deps) {
++        return new ModGraphBuilder.Input(id, id, "1.0", id + ".jar",
++                ModLoaderType.FABRIC, active, Arrays.asList(deps));
++    }
++
++    private static long count(ModGraph graph, ModDependency.Type type) {
++        return graph.getEdges().stream().filter(e -> e.getType() == type).count();
++    }
++
++    @Test
++    public void buildsRequiredOptionalIncompatibleAndMissingEdges() {
++        ModGraph graph = ModGraphBuilder.build(List.of(
++                mod("a", true,
++                        ModDependency.required("b", ">=1.0"),
++                        ModDependency.optional("x", ""),
++                        ModDependency.incompatible("c", ""),
++                        ModDependency.required("minecraft", ""),
++                        ModDependency.required("z", "")),
++                mod("b", true, ModDependency.required("c", "")),
++                mod("c", true),
++                mod("d", true),
++                mod("e", false, ModDependency.required("a", ""))
++        ));
++
++        assertEquals(6, graph.getNodes().size()); // a b c d e + 缺失的 z；可选目标 x 不建节点
++        assertEquals(5, graph.getEdges().size());
++        assertEquals(4, count(graph, ModDependency.Type.REQUIRED));
++        assertEquals(0, count(graph, ModDependency.Type.OPTIONAL));
++        assertEquals(1, count(graph, ModDependency.Type.INCOMPATIBLE));
++
++        ModGraph.Node missing = graph.getNode("z");
++        assertNotNull(missing);
++        assertTrue(missing.isMissing());
++        assertTrue(missing.isActive());
++        assertEquals(1, missing.getInDegree());
++
++        assertNull(graph.getNode("x"));
++        assertNull(graph.getNode("minecraft"));
++
++        ModGraph.Node c = graph.getNode("c");
++        assertNotNull(c);
++        assertEquals(2, c.getInDegree());
++        assertEquals(0, c.getOutDegree());
++        assertFalse(c.isHub()); // 入度 2，未到枢纽阈值
++
++        ModGraph.Node a = graph.getNode("a");
++        assertNotNull(a);
++        assertEquals(3, a.getOutDegree());
++        assertEquals(1, a.getInDegree()); // 只来自已禁用模组 e，也要画出来
++        assertTrue(graph.getNode("d").isIsolated());
++        assertFalse(graph.getNode("e").isActive());
++
++        ModGraph.Stats stats = graph.getStats();
++        assertEquals(6, stats.nodes());
++        assertEquals(5, stats.edges());
++        assertEquals(1, stats.missing());
++        assertEquals(1, stats.disabled());
++        assertEquals(1, stats.isolated());
++        assertEquals(0, stats.hubs());
++    }
++
++    @Test
++    public void dedupesDuplicateInputsAndEdgesAndPrefersActiveFile() {
++        ModGraph graph = ModGraphBuilder.build(List.of(
++                mod("same", false, ModDependency.required("dep", "")),
++                mod("same", true,
++                        ModDependency.required("dep", ""),
++                        ModDependency.required("dep", "")), // 同一依赖重复声明
++                mod("dep", true)
++        ));
++
++        assertEquals(2, graph.getNodes().size());
++        assertEquals(1, graph.getEdges().size());
++        assertTrue(graph.getNode("same").isActive()); // 启用副本胜出
++        assertEquals(1, count(graph, ModDependency.Type.REQUIRED));
++    }
++
++    @Test
++    public void marksHubsAndIsolatedNodes() {
++        ModGraph graph = ModGraphBuilder.build(List.of(
++                mod("hub", true),
++                mod("a", true, ModDependency.required("hub", "")),
++                mod("b", true, ModDependency.required("hub", "")),
++                mod("c", true, ModDependency.required("hub", "")),
++                mod("lonely", true)
++        ));
++
++        assertTrue(graph.getNode("hub").isHub());
++        assertEquals(3, graph.getNode("hub").getInDegree());
++        assertTrue(graph.getNode("lonely").isIsolated());
++        assertEquals(1, graph.getStats().hubs());
++        assertEquals(1, graph.getStats().isolated());
++    }
++
++    @Test
++    public void ignoresBuiltinLoaderIdsEvenIfPassedAsInput() {
++        ModGraph graph = ModGraphBuilder.build(List.of(
++                mod("minecraft", true),
++                mod("a", true, ModDependency.required("minecraft", ""))
++        ));
++
++        assertEquals(1, graph.getNodes().size());
++        assertNotNull(graph.getNode("a"));
++        assertNull(graph.getNode("minecraft"));
++        assertEquals(0, graph.getEdges().size());
++    }
++
++    @Test
++    public void normalizesModIdCase() {
++        ModGraph graph = ModGraphBuilder.build(List.of(
++                new ModGraphBuilder.Input("MyMod", "My Mod", "", "", ModLoaderType.FORGE, true,
++                        List.of(ModDependency.required("OTHER", ""))),
++                new ModGraphBuilder.Input("Other", "Other", "", "", ModLoaderType.FORGE, true,
++                        List.of())
++        ));
++
++        assertEquals(2, graph.getNodes().size());
++        assertNotNull(graph.getNode("mymod"));
++        assertNotNull(graph.getNode("other"));
++        assertEquals(1, graph.getEdges().size());
++        assertEquals("mymod", graph.getEdges().get(0).getSource().getId());
++        assertEquals("other", graph.getEdges().get(0).getTarget().getId());
++    }
++
++    @Test
++    public void keepsOptionalEdgeWhenTargetInstalled() {
++        ModGraph graph = ModGraphBuilder.build(List.of(
++                mod("a", true, ModDependency.optional("b", "")),
++                mod("b", true)
++        ));
++
++        assertEquals(1, graph.getEdges().size());
++        assertEquals(ModDependency.Type.OPTIONAL, graph.getEdges().get(0).getType());
++        assertEquals(1, graph.getStats().optional());
++        assertFalse(graph.getNode("a").isIsolated());
++        assertFalse(graph.getNode("b").isIsolated());
++    }
++}
+diff -ruN a/FCL/src/test/java/com/tungsten/fclcore/mod/modinfo/ModDependencyParsingTest.kt b/FCL/src/test/java/com/tungsten/fclcore/mod/modinfo/ModDependencyParsingTest.kt
+--- a/FCL/src/test/java/com/tungsten/fclcore/mod/modinfo/ModDependencyParsingTest.kt	1970-01-01 08:00:00.000000000 +0800
++++ b/FCL/src/test/java/com/tungsten/fclcore/mod/modinfo/ModDependencyParsingTest.kt	2026-11-01 11:19:31.357999511 +0800
+@@ -0,0 +1,113 @@
++package com.tungsten.fclcore.mod.modinfo
++
++import com.tungsten.fclcore.mod.ModDependency
++import kotlinx.serialization.decodeFromString
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.tomlj.Toml
++
++/**
++ * 元数据 → 统一依赖模型的回归测试。
++ * 这些函数是纯函数，不需要真实 jar，也不依赖 Android 环境。
++ */
++class ModDependencyParsingTest {
++
++    @Test
++    fun fabricDependsRecommendsBreaks() {
++        val metadata = MOD_METADATA_JSON.decodeFromString<FabricModMetadata>(
++            """
++            {
++              "id": "owner",
++              "name": "Owner",
++              "version": "1.0",
++              "depends": {"dep-a": ">=1.0"},
++              "recommends": {"dep-b": "*"},
++              "breaks": {"bad-mod": "<2.0"}
++            }
++            """.trimIndent()
++        )
++        val deps = FabricModMetadata.dependenciesOf(metadata)
++        assertEquals(3, deps.size)
++        assertTrue(deps.contains(ModDependency("dep-a", ModDependency.Type.REQUIRED, ">=1.0")))
++        assertTrue(deps.contains(ModDependency("dep-b", ModDependency.Type.OPTIONAL, "*")))
++        assertTrue(deps.contains(ModDependency("bad-mod", ModDependency.Type.INCOMPATIBLE, "<2.0")))
++    }
++
++    @Test
++    fun forgeMandatoryAndTypeMapping() {
++        val toml = Toml.parse(
++            """
++            [[mods]]
++            modId = "owner"
++            displayName = "Owner"
++
++            [[dependencies.owner]]
++            modId = "dep-a"
++            mandatory = true
++            versionRange = "[1,)"
++
++            [[dependencies.owner]]
++            modId = "dep-b"
++            mandatory = false
++
++            [[dependencies.owner]]
++            modId = "bad-mod"
++            type = "incompatible"
++
++            [[dependencies.owner]]
++            modId = "opt-by-type"
++            type = "optional"
++            """.trimIndent()
++        )
++        val deps = ForgeNewModMetadata.dependenciesOf(toml, "owner")
++        assertEquals(4, deps.size)
++        assertTrue(deps.contains(ModDependency("dep-a", ModDependency.Type.REQUIRED, "[1,)")))
++        assertTrue(deps.contains(ModDependency("dep-b", ModDependency.Type.OPTIONAL, "")))
++        assertTrue(deps.contains(ModDependency("bad-mod", ModDependency.Type.INCOMPATIBLE, "")))
++        assertTrue(deps.contains(ModDependency("opt-by-type", ModDependency.Type.OPTIONAL, "")))
++    }
++
++    @Test
++    fun forgeNonStandardDependenciesArrayStillDecodesMods() {
++        // 社区里出现过 [[dependencies]]（没有 owner 分组）的写法。依赖读不到没关系，
++        // 但 metadata 本身必须还能反序列化，否则整个模组会从列表里消失。
++        val toml = Toml.parse(
++            """
++            [[mods]]
++            modId = "owner"
++            displayName = "Owner"
++
++            [[dependencies]]
++            modId = "something"
++            """.trimIndent()
++        )
++        val metadata = MOD_METADATA_JSON.decodeFromString<ForgeNewModMetadata>(toml.toJson())
++        assertEquals("owner", metadata.mods.first().modId)
++    }
++
++    @Test
++    fun quiltStringAndObjectDependencies() {
++        val root = MOD_METADATA_JSON.decodeFromString<QuiltModMetadata>(
++            """
++            {
++              "schema_version": 1,
++              "quilt_loader": {
++                "id": "quilt-owner",
++                "version": "1.0",
++                "metadata": {"name": "Quilt Owner", "description": ""},
++                "depends": ["string-dep", {"id": "object-dep", "versions": ">=2"}],
++                "recommends": [{"id": "optional-dep"}],
++                "breaks": ["bad-dep"]
++              }
++            }
++            """.trimIndent()
++        )
++        val deps = QuiltModMetadata.dependenciesOf(root.quiltLoader)
++        assertEquals(4, deps.size)
++        assertTrue(deps.contains(ModDependency("string-dep", ModDependency.Type.REQUIRED, "")))
++        assertTrue(deps.contains(ModDependency("object-dep", ModDependency.Type.REQUIRED, ">=2")))
++        assertTrue(deps.contains(ModDependency("optional-dep", ModDependency.Type.OPTIONAL, "")))
++        assertTrue(deps.contains(ModDependency("bad-dep", ModDependency.Type.INCOMPATIBLE, "")))
++    }
++}

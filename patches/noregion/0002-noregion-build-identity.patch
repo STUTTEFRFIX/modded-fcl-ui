@@ -1,0 +1,16 @@
+--- a/FCL/build.gradle.kts	2026-10-24 15:28:58.948675936 +0800
++++ b/FCL/build.gradle.kts	2026-10-24 15:28:59.040675936 +0800
+@@ -73,11 +73,11 @@
+     }
+ 
+     defaultConfig {
+-        applicationId = "com.tungsten.fcl"
++        applicationId = "com.tungsten.fcl.noregion"
+         minSdk = libs.versions.minSdk.get().toInt()
+         targetSdk = libs.versions.targetSdk.get().toInt()
+         versionCode = 1341
+-        versionName = "1.3.4.1"
++        versionName = "1.3.4.1-noregion"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         externalNativeBuild {
+             cmake {

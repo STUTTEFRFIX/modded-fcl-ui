@@ -1,0 +1,23 @@
+# Gradle / Android build outputs
+build/
+.gradle/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Signing material and local machine config
+*.jks
+*.keystore
+*.pepk
+local.properties
+
+# IDE / OS
+.idea/
+.DS_Store
+Thumbs.db
+
+# Patch rejects
+*.orig
+*.rej

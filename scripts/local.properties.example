@@ -1,0 +1,4 @@
+sdk.dir=/data/user/0/cc.codroid/files/home/workspace/fcl-build/sdk
+pwd=FCL-Build-2026
+arch=arm64
+cmake.dir=/data/user/0/cc.codroid/files/usr

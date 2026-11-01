@@ -1,0 +1,23 @@
+--- a/FCL/src/main/java/com/tungsten/fcl/terracotta/TerracottaNodeList.java	2026-10-24 15:28:58.872675936 +0800
++++ b/FCL/src/main/java/com/tungsten/fcl/terracotta/TerracottaNodeList.java	2026-10-24 15:28:59.020675936 +0800
+@@ -20,8 +20,6 @@
+ import static com.tungsten.fclcore.util.Logging.LOG;
+ 
+ import com.google.gson.JsonParseException;
+-import com.tungsten.fcl.util.RegionUtils;
+-import com.tungsten.fclcore.util.StringUtils;
+ import com.tungsten.fclcore.util.gson.JsonUtils;
+ import com.tungsten.fclcore.util.gson.TolerableValidationException;
+ import com.tungsten.fclcore.util.gson.Validation;
+@@ -103,9 +101,8 @@
+                                     return false;
+                                 }
+ 
+-                                return StringUtils.isBlank(node.region())
+-                                        || (RegionUtils.isChinaMainlandMachine()
+-                                        == "CN".equalsIgnoreCase(node.region()));
++                                // 去除地区限制：不再按设备地区过滤节点，所有通过校验的节点都可使用
++                                return true;
+                             })
+                             .map(node -> URI.create(node.url()))
+                             .collect(Collectors.toList());
