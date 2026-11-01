@@ -237,3 +237,14 @@ rm -f "/storage/emulated/0/FCL/.minecraft/versions/1.21.4-NeoForge/mods/"*.jar
 | 2026-11-01 上午 | 首版：力导向布局 + 全屏竖排对话框。真机截图显示 60 个模组挤成一小团、标签重叠，用户反馈「图的排版有大问题了」 |
 | 2026-11-01 中午 | 改为按依赖深度分层布局；横屏新增 `layout-land` 侧栏布局（图形占满左侧，控件收进右侧 300dp）；标签增加 2dp 碰撞边距、最多 80 个、缩放阈值；重新构建并安装 |
 
+
+---
+
+## 8. 私有仓库与发布
+
+- 仓库：[`STUTTEFRFIX/modded-fcl-ui`](https://github.com/STUTTEFRFIX/modded-fcl-ui)（private）
+- 源码快照：`source/`；完整补丁：`patches/feature-mod-graph.patch`
+- Release：
+  - [`v1.3.4.1-modgraph`](https://github.com/STUTTEFRFIX/modded-fcl-ui/releases/tag/v1.3.4.1-modgraph)（带关系图）
+  - [`v1.3.4.1-noregion`](https://github.com/STUTTEFRFIX/modded-fcl-ui/releases/tag/v1.3.4.1-noregion)（基线）
+- 构建与校验：仓库根目录 `BUILD.md`、`builds/SHA256SUMS`
