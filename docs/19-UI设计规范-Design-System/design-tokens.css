@@ -1,0 +1,204 @@
+/* ==========================================================================
+   FCL UI Design Tokens · V2 纸质
+   --------------------------------------------------------------------------
+   版本：2.0.0 · 2026-11-05
+   基准：390×844 竖屏；1 CSS px ≈ 1dp（390dp 参考宽）
+   用途：Web 原型 / 设计工具 / Android 映射参考
+   规则：界面只能引用 token；禁止在布局里写死 hex / 字号 / 圆角 / 时长。
+   说明：原型 `home-paper-v2.html` 的 `:root` 使用同名 token；本文件是唯一数值源。
+   ========================================================================== */
+
+:root{
+  color-scheme: light;
+
+  /* ----------------------------------------------------------------------
+     1. 纸
+     ---------------------------------------------------------------------- */
+  --paper-0: #F1EEE6;                 /* 纸面顶部 */
+  --paper-1: #EAE6DB;                 /* 纸面中部 */
+  --paper-2: #E2DDD1;                 /* 纸面底部 / 纸边 */
+  --card:    #F8F6EF;                 /* 纸卡 / 明信片 */
+
+  /* ----------------------------------------------------------------------
+     2. 墨
+     ---------------------------------------------------------------------- */
+  --ink:     #2C2E28;                 /* 主文字：12.70:1 on card */
+  --ink-2:   #55584C;                 /* 次级：6.73:1 on card */
+  --ink-3:   #5F6256;                 /* 辅助：5.77:1 on card；4.60:1 on paper-2 */
+
+  /* ----------------------------------------------------------------------
+     3. 苔绿：唯一 UI 强调色
+     ---------------------------------------------------------------------- */
+  --accent:      #7F9470;             /* 仅装饰点/插图；不是文字色 */
+  --accent-ink:  #4C6143;             /* 苔墨：选中/主操作/焦点；6.27:1 on card */
+  --accent-wash: #E2E7D8;             /* 选中淡印 */
+  --on-accent:   #F8F3E7;             /* 苔墨上的图标；6.12:1 */
+
+  /* ----------------------------------------------------------------------
+     4. 线 / 玻璃
+     ---------------------------------------------------------------------- */
+  --line:        rgba(74, 68, 54, .14);
+  --line-strong: rgba(74, 68, 54, .24);
+  --glass-fill:  linear-gradient(145deg, rgba(252, 249, 242, .64), rgba(238, 233, 222, .72));
+  --glass-fill-top:    rgba(252, 249, 242, .64);
+  --glass-fill-bottom: rgba(238, 233, 222, .72);
+  --glass-edge:  rgba(255, 255, 255, .78);
+  --glass-solid: #F7F4EC;             /* 不支持模糊 / reduced-transparency 的回退 */
+
+  /* ----------------------------------------------------------------------
+     5. 状态层
+     ---------------------------------------------------------------------- */
+  --focus-color:       var(--accent-ink);
+  --pressed-overlay:   rgba(74, 68, 54, .05);
+  --pressed-overlay-strong: rgba(74, 68, 54, .08);
+  --disabled-ink:      rgba(44, 46, 40, .38);
+  --disabled-surface:  rgba(44, 46, 40, .06);
+  --scrim:             rgba(44, 46, 40, .28);
+
+  /* ----------------------------------------------------------------------
+     6. 语义色（保留；当前首页未使用）
+     ---------------------------------------------------------------------- */
+  --error:           #8C4F3F;
+  --error-surface:   #F0E2DA;
+  --warning:         #7A5A32;
+  --warning-surface: #F2E8D6;
+  --success:         #4C6143;
+  --success-surface: #E2E7D8;
+  --info:            #4E5A66;
+  --info-surface:    #E7EBEE;
+
+  /* ----------------------------------------------------------------------
+     7. 内容插画色（不是 UI token；只允许出现在 SVG/缩略图）
+     ---------------------------------------------------------------------- */
+  --art-rust:  #A8795E;
+  --art-amber: #C3935A;
+  --art-sage:  #8FA37C;
+  --art-olive: #78886B;
+  --art-deep:  #5E6E56;
+  --art-soil:  #8A6F55;
+  --art-wood:  #7A5D47;
+  --art-cloud: #F7F3E9;
+
+  /* ----------------------------------------------------------------------
+     8. 字体
+     ---------------------------------------------------------------------- */
+  --font-family: system-ui, -apple-system, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-medium:  500;
+  --font-weight-semi:    600;
+
+  --text-display-size: 32px;  --text-display-line: 40px;  --text-display-weight: 600;
+  --text-title-size:   22px;  --text-title-line:   28px;  --text-title-weight:   600;
+  --text-body-size:    16px;  --text-body-line:     24px;  --text-body-weight:    400;
+  --text-body-strong-size: 16px; --text-body-strong-line: 24px; --text-body-strong-weight: 500;
+  --text-label-size:   14px;  --text-label-line:    20px;  --text-label-weight:   500;
+  --text-meta-size:    14px;  --text-meta-line:     20px;  --text-meta-weight:    400;
+  --text-island-version-size: 16px; --text-island-version-line: 20px; --text-island-version-weight: 600;
+  --text-island-loader-size:  14px; --text-island-loader-line:  18px; --text-island-loader-weight:  400;
+  --text-status-size:  14px;  --text-status-line:   20px;  --text-status-weight:  600;
+
+  /* ----------------------------------------------------------------------
+     9. 间距（4 基数）
+     ---------------------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ----------------------------------------------------------------------
+     10. 圆角（同心）
+     ---------------------------------------------------------------------- */
+  --radius-thumb:    12px;
+  --radius-row:      16px;
+  --radius-postcard: 20px;
+  --radius-bar:      28px;
+  --radius-pill:     999px;
+
+  /* ----------------------------------------------------------------------
+     11. 布局
+     ---------------------------------------------------------------------- */
+  --layout-width:       390px;
+  --layout-height:      844px;
+  --content-inset:      16px;
+  --chrome-inset:       12px;
+  --status-height:      44px;
+  --island-height:      64px;
+  --bar-height:         72px;
+  --content-bottom-padding: 160px;    /* 72 + 64 + 24 */
+
+  /* ----------------------------------------------------------------------
+     12. 动效
+     ---------------------------------------------------------------------- */
+  --duration-press:     120ms;
+  --duration-ui:        240ms;
+  --duration-enter:     480ms;
+  --duration-bar-enter: 520ms;
+  --delay-bar:          60ms;
+  --duration-tab-fade:  200ms;
+  --duration-tab-move:  260ms;
+  --ease-out:           cubic-bezier(.23, 1, .32, 1);
+
+  /* ----------------------------------------------------------------------
+     13. 组件尺寸
+     ---------------------------------------------------------------------- */
+  /* 灵动岛 */
+  --island-side-inset:     12px;
+  --island-bottom-gap:     12px;
+  --island-padding-x:      12px;
+  --island-gap:            12px;
+  --island-icon:           40px;
+  --island-launch-hit:     48px;
+  --island-launch-visual:  44px;
+  --island-blur:           26px;
+  --island-saturate:       115%;
+  --island-shadow:         0 14px 32px rgba(80, 70, 55, .18);
+
+  /* 底栏 */
+  --bar-top-radius:        28px;
+  --bar-padding:           8px;
+  --tab-min-height:        54px;
+  --tab-icon:              24px;
+  --tab-label-size:        14px;
+  --tab-indicator-width:   52px;
+  --tab-indicator-height:  30px;
+  --tab-indicator-top:     4px;
+
+  /* 明信片 */
+  --postcard-height:       188px;
+  --postcard-art-height:   112px;
+  --postcard-caption-height: 74px;
+  --postcard-chip-height:  28px;
+  --postcard-more:         44px;
+
+  /* 世界纸卡 */
+  --row-height:            70px;
+  --row-thumb:             44px;
+  --row-padding:           12px;
+  --row-gap:               12px;
+  --row-radius:            16px;
+
+  /* 图标按钮 */
+  --icon-button:           44px;
+}
+
+/* 更高对比度：只加深墨/线；不改成纯黑/纯白 */
+@media (prefers-contrast: more){
+  :root{
+    --ink:   #1E201B;
+    --ink-2: #3F4237;
+    --ink-3: #4B4E42;
+    --line:        rgba(74, 68, 54, .26);
+    --line-strong: rgba(74, 68, 54, .38);
+  }
+}
+
+/* 减少透明：玻璃回退到实色；纸卡/底栏本来就是实色 */
+@media (prefers-reduced-transparency: reduce){
+  :root{
+    --glass-fill: var(--glass-solid);
+  }
+}

@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121614">
+<meta name="color-scheme" content="dark">
+<title>FCL 主页 · 灵动岛 V1</title>
+<!--
+  FCL 主页 · 灵动岛 V1（2026-11-05）
+  ────────────────────────────────────────────────────────────
+  设计意图：规范简约线条 + 拟物材质 + 护眼深色。
+  结构：内容区 / 玻璃灵动岛 / 玻璃底部三栏（首页·下载·设置）。
+  规格与取舍见同目录 README.md。
+  这是视觉稿，不含真实启动逻辑；底部导航只演示选中态。
+-->
+<style>
+/* ==========================================================================
+   0. 设计 token
+   规范：4px 间距基数；圆角采用同心层级（28 → 20 → 16 → 12 → pill）；
+   深色但不使用纯黑，文字不使用纯白；只保留一个苔绿强调色。
+   ========================================================================== */
+:root{
+  color-scheme: dark;
+
+  /* 页面底色（卡片用半透明深色渐变，见 §5） */
+  --bg-base:       #151B18;
+
+  /* 文字：暖灰，避免纯白刺眼 */
+  --ink:           #F0EDE6;
+  --ink-2:         #C9CEC7;
+  --ink-3:         #A6AEA6;
+
+  /* 唯一的强调色：低饱和苔绿 */
+  --accent:        #A8C89A;
+  --accent-hi:     #C2DBB4;
+  --on-accent:     #152014;
+
+  /* 线与玻璃 */
+  --line:          rgba(240, 237, 230, .08);
+  --line-strong:   rgba(240, 237, 230, .14);
+  --glass-edge:    rgba(255, 255, 255, .15);
+
+  /* 同心圆角 */
+  --r-xs: 12px;    /* 缩略图 */
+  --r-sm: 16px;    /* 列表行 */
+  --r-md: 20px;    /* 大卡 / 主视觉 */
+  --r-lg: 28px;    /* 底栏上沿 */
+  --r-pill: 999px;
+
+  /* 间距 */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s8: 40px;
+
+  /* 字号：正文 16，辅助 14，不出现 14 以下 */
+  --fs-h1: 32px;   --lh-h1: 40px;
+  --fs-h2: 24px;   --lh-h2: 32px;
+  --fs-body: 16px; --lh-body: 24px;
+  --fs-meta: 14px; --lh-meta: 20px;
+  --fs-label: 14px;--lh-label: 20px;
+
+  /* 动效：只动 transform / opacity；按压 120ms */
+  --dur-press: 120ms;
+  --dur-ui: 240ms;
+  --dur-enter: 480ms;
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+
+  /* 固定 chrome 的尺寸 */
+  --bar-h: 72px;
+  --island-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+*{ box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body{ height: 100%; }
+
+body{
+  background: radial-gradient(120% 90% at 50% 0%, #1C2420 0%, #0E1210 55%, #0A0D0B 100%);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+button{
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible{
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 3px;
+}
+
+svg{ display: block; }
+
+/* 图标精灵：不占布局 */
+.sprite{ position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon{
+  width: 24px; height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon--fill{ fill: currentColor; stroke: none; }
+
+/* ==========================================================================
+   1. 舞台与手机屏
+   ========================================================================== */
+.stage{
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+}
+
+.screen{
+  position: relative;
+  width: 100%;
+  height: 100vh;          /* 老 WebView 回退 */
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-base);
+  isolation: isolate;
+}
+
+/* 桌面端：给设计稿一个克制的手机框 */
+@media (min-width: 720px){
+  .stage{ padding: 24px; }
+  .screen{
+    width: 390px;
+    height: min(844px, calc(100dvh - 48px));
+    border-radius: 44px;
+    box-shadow:
+      0 40px 90px rgba(0, 0, 0, .55),
+      0 0 0 1px rgba(255, 255, 255, .07);
+  }
+}
+
+/* ==========================================================================
+   2. 背景：晨雾方块山谷
+   —— 低饱和、低亮度；只负责氛围，不与内容争夺注意力
+   ========================================================================== */
+.backdrop{
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2F3D35 0%, #222E28 48%, #131915 100%);
+}
+
+.terrain{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.sky-glow{
+  position: absolute;
+  inset: -18% -12% auto -12%;
+  height: 62%;
+  background: radial-gradient(58% 58% at 72% 18%, rgba(217, 196, 156, .18), rgba(217, 196, 156, 0) 70%);
+  pointer-events: none;
+}
+
+.grid-overlay{
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(240, 237, 230, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 237, 230, .035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, .3) 46%, transparent 72%);
+          mask-image: linear-gradient(180deg, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, .3) 46%, transparent 72%);
+  opacity: .5;
+  pointer-events: none;
+}
+
+.grain{
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  opacity: .07;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.vignette{
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 14, 12, .55) 0%, rgba(10, 14, 12, 0) 20%, rgba(10, 14, 12, 0) 58%, rgba(10, 14, 12, .45) 82%, rgba(10, 14, 12, .82) 100%);
+  pointer-events: none;
+}
+
+/* 底部的暖光源：像画外的一堆营火，给玻璃一点可透的光 */
+.ember-glow{
+  position: absolute;
+  left: 50%;
+  bottom: -10%;
+  width: 92%;
+  height: 34%;
+  transform: translateX(-50%);
+  background: radial-gradient(50% 55% at 50% 60%, rgba(226, 185, 122, .17), rgba(226, 185, 122, .06) 45%, transparent 72%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   3. 可滚动内容
+   ========================================================================== */
+.content{
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--s4) calc(var(--bar-h) + var(--island-h) + var(--s6) + var(--safe-bottom));
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.content::-webkit-scrollbar{ display: none; }
+
+/* 仿状态栏：仅用于设计稿观感，真实 App 用系统状态栏 */
+.statusbar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding-top: max(env(safe-area-inset-top, 0px), 10px);
+  padding-bottom: var(--s1);
+  color: #DDE2DA;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-icons{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: .92;
+}
+
+/* 页头 */
+.page-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s5) 0 var(--s4);
+}
+
+.page-head h1{
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
+  font-weight: 600;
+  letter-spacing: 0;          /* 中文不做负字距 */
+}
+
+.page-head p{
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 400;
+}
+
+.account{
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink-2);
+  background: linear-gradient(180deg, #2A352F, #1E2722);
+  border: 1px solid var(--line-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    0 6px 16px rgba(0, 0, 0, .24);
+  transition: transform var(--dur-press) var(--ease-out),
+              background-color var(--dur-ui) var(--ease-out);
+}
+.account:active{ transform: scale(.95); }
+.account .icon{ width: 22px; height: 22px; }
+
+/* ==========================================================================
+   4. 主视觉卡：当前世界
+   ========================================================================== */
+.feature{
+  position: relative;
+  height: 184px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .10);
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+  isolation: isolate;
+}
+
+.feature-art{ position: absolute; inset: 0; }
+.feature-art svg{ width: 100%; height: 100%; }
+
+.feature-scrim{
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgba(13, 17, 14, .06) 0%,
+    rgba(13, 17, 14, 0) 34%,
+    rgba(13, 17, 14, .52) 72%,
+    rgba(13, 17, 14, .92) 100%);
+}
+
+.feature-chip{
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  color: #E6EBE2;
+  background: rgba(13, 18, 15, .58);
+  border: 1px solid rgba(255, 255, 255, .12);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 500;
+}
+
+.chip-dot{
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(168, 200, 154, .14);
+}
+
+.feature-more{
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #E8ECE5;
+  background: rgba(13, 18, 15, .42);
+  border: 1px solid rgba(255, 255, 255, .14);
+  transition: transform var(--dur-press) var(--ease-out),
+              background-color var(--dur-ui) var(--ease-out);
+}
+.feature-more:active{ transform: scale(.94); }
+.feature-more .icon{ width: 20px; height: 20px; }
+
+.feature-copy{
+  position: absolute;
+  left: var(--s4);
+  right: var(--s4);
+  bottom: 12px;
+  display: grid;
+  gap: 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+}
+.feature-copy h2{
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  font-weight: 600;
+}
+.feature-copy p{
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   5. 世界列表
+   ========================================================================== */
+.section-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  margin: var(--s4) 0 var(--s3);
+}
+.section-head h2{
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.all-button{
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding-left: var(--s3);
+  border-radius: var(--s2);
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 500;
+  transition: color var(--dur-ui) var(--ease-out);
+}
+.all-button:active{ color: var(--ink); }
+.all-button .icon{ width: 16px; height: 16px; stroke-width: 2; }
+
+.world-list{
+  display: grid;
+  gap: var(--s3);
+}
+
+.world-row{
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 70px;
+  padding: var(--s3);
+  border-radius: var(--r-sm);
+  text-align: left;
+  background: linear-gradient(180deg, rgba(34, 44, 39, .92), rgba(25, 33, 29, .94));
+  border: 1px solid var(--line);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, .16),
+    inset 0 1px 0 rgba(255, 255, 255, .05);
+  transition: background-color var(--dur-ui) var(--ease-out),
+              border-color var(--dur-ui) var(--ease-out);
+}
+.world-row:active{
+  background: linear-gradient(180deg, rgba(42, 54, 48, .96), rgba(30, 40, 35, .97));
+  border-color: var(--line-strong);
+}
+
+.world-copy{
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.world-title{
+  display: block;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.world-meta{
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron{
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+  opacity: .68;
+  stroke-width: 2;
+}
+
+/* 缩略图：用 CSS 画三种方块地貌，避免外部图片依赖 */
+.thumb{
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+.thumb::before,
+.thumb::after{
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+/* 红石洞窟 */
+.thumb--redstone{
+  background: linear-gradient(180deg, #4A3833 0 40%, #2A211F 100%);
+}
+.thumb--redstone::before{
+  inset: 0;
+  background: radial-gradient(60% 55% at 68% 34%, rgba(198, 104, 78, .55), transparent 70%);
+}
+.thumb--redstone::after{
+  left: -6%;
+  right: -6%;
+  bottom: 0;
+  height: 54%;
+  background: linear-gradient(90deg, #3B2B26 0 28%, #2B211E 28% 55%, #3D2C27 55% 78%, #2A201D 78%);
+  clip-path: polygon(0 46%, 16% 46%, 16% 26%, 34% 26%, 34% 50%, 52% 50%, 52% 30%, 72% 30%, 72% 54%, 88% 54%, 88% 38%, 100% 38%, 100% 100%, 0 100%);
+}
+
+/* 空岛 */
+.thumb--sky{
+  background: linear-gradient(180deg, #A6BAB5 0%, #7E9792 55%, #6C857F 100%);
+}
+.thumb--sky::before{
+  left: 12%;
+  top: 18%;
+  width: 20px;
+  height: 5px;
+  border-radius: 1px;
+  background: #E7EDE7;
+  opacity: .6;
+  box-shadow: 11px -5px 0 -1px #E7EDE7, 3px 5px 0 -1px #E7EDE7;
+}
+.thumb--sky::after{
+  left: 22%;
+  right: 22%;
+  bottom: 16%;
+  height: 32%;
+  background: linear-gradient(180deg, #6E8B60 0 30%, #5A4938 30% 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 82% 45%, 82% 72%, 64% 72%, 64% 100%, 44% 100%, 44% 72%, 26% 72%, 26% 45%, 0 45%);
+}
+
+/* 沙岩峡谷 */
+.thumb--sand{
+  background: linear-gradient(180deg, #B69A73 0 42%, #8A6E50 100%);
+}
+.thumb--sand::before{
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0 18%, rgba(255, 255, 255, .08) 18% 20%, transparent 20% 100%);
+}
+.thumb--sand::after{
+  left: -8%;
+  right: -8%;
+  bottom: 0;
+  height: 58%;
+  background: linear-gradient(90deg, #7D6248 0 30%, #927552 30% 62%, #6B543E 62% 100%);
+  clip-path: polygon(0 38%, 14% 38%, 14% 20%, 30% 20%, 30% 42%, 46% 42%, 46% 26%, 64% 26%, 64% 46%, 82% 46%, 82% 30%, 100% 30%, 100% 100%, 0 100%);
+}
+
+.hint{
+  margin-top: var(--s4);
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  text-align: left;
+}
+
+/* ==========================================================================
+   6. 玻璃灵动岛
+   —— 结构：世界图标 | 版本 / 加载器 | 启动
+   —— 材质：深色烟玻璃；底栏是更“重”的结构材质，岛是更“轻”的交互材质
+   ========================================================================== */
+.island{
+  position: absolute;
+  z-index: 30;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--bar-h) + var(--safe-bottom) + 12px);
+  height: var(--island-h);
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 var(--s3);
+  border-radius: var(--r-pill);
+  background: linear-gradient(145deg, rgba(45, 55, 49, .62), rgba(15, 20, 17, .73));
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+          backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .20),
+    inset 0 -1px 0 rgba(0, 0, 0, .30),
+    0 16px 36px rgba(0, 0, 0, .38);
+  animation: chrome-in var(--dur-enter) var(--ease-out) both;
+}
+
+/* 顶部斜向高光：让“玻璃”有被光扫过的质感 */
+.island::after{
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 0;
+  height: 58%;
+  border-radius: inherit;
+  background: linear-gradient(118deg, rgba(255, 255, 255, .11) 0%, rgba(255, 255, 255, .03) 28%, rgba(255, 255, 255, 0) 48%);
+  pointer-events: none;
+}
+
+.island > *{ position: relative; z-index: 1; }
+
+/* 世界图标：像素草方块近景 */
+.block-icon{
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  background: linear-gradient(180deg, #7EA36C 0 32%, #6B8F5C 32% 38%, #6D5943 38% 100%);
+  border: 1px solid rgba(255, 255, 255, .20);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .25),
+    inset 0 -2px 4px rgba(0, 0, 0, .25),
+    0 2px 6px rgba(0, 0, 0, .25);
+}
+.block-icon::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, .07) 1px, transparent 1px),
+    linear-gradient(rgba(0, 0, 0, .09) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+.block-icon::after{
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 29%;
+  height: 9px;
+  background: linear-gradient(180deg, #7EA36C 0 48%, #5E7C50 48% 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 88% 55%, 88% 100%, 75% 100%, 75% 55%, 62% 55%, 62% 100%, 50% 100%, 50% 55%, 38% 55%, 38% 100%, 25% 100%, 25% 55%, 12% 55%, 12% 100%, 0 100%);
+}
+
+.island-copy{
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.island-version{
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: #F3F0E9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .22);
+}
+
+.island-loader{
+  font-size: var(--fs-meta);
+  line-height: 18px;
+  font-weight: 400;
+  color: #CBD1C9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 唯一的实心强调按钮：启动
+   视觉圆 44，按钮热区 48（Android 48dp 下限） */
+.launch{
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: none;
+  transition: transform var(--dur-press) var(--ease-out),
+              filter var(--dur-ui) var(--ease-out);
+}
+.launch::before{
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .48),
+    inset 0 -2px 3px rgba(0, 0, 0, .16),
+    0 4px 12px rgba(0, 0, 0, .26);
+}
+.launch:active{ transform: scale(.94); filter: brightness(.96); }
+.launch:focus-visible{ outline-color: var(--ink); outline-offset: 2px; }
+.launch .icon{ position: relative; z-index: 1; width: 22px; height: 22px; }
+
+/* ==========================================================================
+   7. 底部三栏：首页 / 下载 / 设置
+   ========================================================================== */
+.tabbar{
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--bar-h) + var(--safe-bottom));
+  display: flex;
+  align-items: stretch;
+  padding: var(--s2) var(--s2) calc(var(--s2) + var(--safe-bottom));
+  background: linear-gradient(180deg, rgba(34, 44, 38, .72), rgba(13, 18, 15, .90));
+  -webkit-backdrop-filter: blur(28px) saturate(130%);
+          backdrop-filter: blur(28px) saturate(130%);
+  border-top: 1px solid rgba(255, 255, 255, .10);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow:
+    0 -16px 36px rgba(0, 0, 0, .24),
+    inset 0 1px 0 rgba(255, 255, 255, .07);
+  animation: chrome-in 520ms var(--ease-out) 60ms both;
+}
+
+.tab{
+  position: relative;
+  flex: 1;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 14px;
+  color: var(--ink-3);
+  transition: color var(--dur-ui) var(--ease-out),
+              background-color var(--dur-ui) var(--ease-out);
+}
+.tab:active{ background: rgba(255, 255, 255, .04); }
+
+/* 选中指示：图标后面的浅色胶囊，不用第二层模糊 */
+.tab-ind{
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 52px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  background: rgba(168, 200, 154, .13);
+  border: 1px solid rgba(168, 200, 154, .16);
+  opacity: 0;
+  transform: translateX(-50%) scale(.92);
+  transition: opacity 200ms var(--ease-out),
+              transform 260ms var(--ease-out);
+}
+.tab.is-active{ color: var(--accent-hi); }
+.tab.is-active .tab-ind{ opacity: 1; transform: translateX(-50%) scale(1); }
+
+.tab-icon{
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+}
+.tab-label{
+  position: relative;
+  z-index: 1;
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 500;
+  letter-spacing: .01em;
+}
+
+/* ==========================================================================
+   8. 动效
+   —— 只做一次性的材质入场；不做循环微动效
+   ========================================================================== */
+@keyframes chrome-in{
+  from{ opacity: 0; transform: translateY(10px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+/* 精细指针才启用 hover，触屏不做粘滞 hover */
+@media (hover: hover) and (pointer: fine){
+  .tab:hover{ background: rgba(255, 255, 255, .04); }
+  .world-row:hover{ border-color: var(--line-strong); }
+  .all-button:hover{ color: var(--ink); }
+  .account:hover{ background: linear-gradient(180deg, #303C35, #222C27); }
+  .feature-more:hover{ background: rgba(13, 18, 15, .56); }
+  .launch:hover{ filter: brightness(1.04); }
+}
+
+/* ==========================================================================
+   9. 可访问性与材质降级
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce){
+  .island,
+  .tabbar{ animation: none; }
+
+  .account,
+  .feature-more,
+  .launch{ transition: filter var(--dur-ui) linear; }
+  .account:active,
+  .feature-more:active,
+  .launch:active{ transform: none; }
+
+  .tab,
+  .tab-ind,
+  .world-row,
+  .all-button{ transition-duration: 200ms; transition-timing-function: linear; }
+}
+
+/* 不支持的浏览器：加深底色，保证文字对比度 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+  .island{ background: linear-gradient(145deg, #242D28, #161C19); }
+  .tabbar{ background: linear-gradient(180deg, #202923, #121714); }
+}
+
+/* 减少透明：改成实色，不做模糊 */
+@media (prefers-reduced-transparency: reduce){
+  .island,
+  .tabbar{
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+  }
+  .island{ background: #1D2622; }
+  .tabbar{ background: #161D19; }
+}
+
+/* 更高对比度 */
+@media (prefers-contrast: more){
+  :root{
+    --ink-2: #E4E7E1;
+    --ink-3: #C6CBC4;
+    --line: rgba(255, 255, 255, .18);
+    --line-strong: rgba(255, 255, 255, .28);
+  }
+  .island,
+  .tabbar{ border-color: rgba(255, 255, 255, .30); }
+}
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="screen" aria-label="FCL 启动器主界面设计稿">
+
+    <!-- ================= 背景 ================= -->
+    <div class="backdrop" aria-hidden="true">
+      <svg class="terrain" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="bg-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2F3D35"/>
+            <stop offset=".5" stop-color="#222E28"/>
+            <stop offset="1" stop-color="#131915"/>
+          </linearGradient>
+          <radialGradient id="bg-sun" cx="50%" cy="50%" r="50%">
+            <stop offset="0" stop-color="#D9C49C" stop-opacity=".22"/>
+            <stop offset="1" stop-color="#D9C49C" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="bg-fade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#0E1310" stop-opacity="0"/>
+            <stop offset="1" stop-color="#0E1310" stop-opacity=".92"/>
+          </linearGradient>
+        </defs>
+
+        <rect width="390" height="844" fill="url(#bg-sky)"/>
+        <circle cx="288" cy="128" r="120" fill="url(#bg-sun)"/>
+
+        <!-- 方块云 -->
+        <g fill="#E2E8DD" opacity=".06">
+          <rect x="42" y="118" width="74" height="6" rx="3"/>
+          <rect x="62" y="108" width="38" height="6" rx="3"/>
+          <rect x="250" y="196" width="62" height="5" rx="2.5"/>
+          <rect x="272" y="188" width="26" height="5" rx="2.5"/>
+        </g>
+
+        <!-- 远山 -->
+        <path d="M0 558 H34 V540 H72 V552 H112 V526 H154 V546 H198 V520 H242 V540 H286 V518 H330 V536 H366 V522 H390 V844 H0 Z" fill="#334138" opacity=".45"/>
+        <!-- 中山 -->
+        <path d="M0 612 H30 V594 H70 V606 H108 V580 H152 V600 H194 V574 H238 V596 H280 V570 H326 V590 H364 V578 H390 V844 H0 Z" fill="#2A3730" opacity=".65"/>
+        <!-- 近山 -->
+        <path d="M0 684 H42 V662 H92 V678 H138 V650 H188 V672 H236 V646 H288 V668 H334 V652 H390 V844 H0 Z" fill="#1E2923"/>
+
+        <!-- 近景树影 -->
+        <g fill="#18211C">
+          <rect x="28" y="640" width="5" height="40"/>
+          <rect x="16" y="620" width="30" height="22" rx="2"/>
+          <rect x="22" y="610" width="18" height="12" rx="2"/>
+          <rect x="342" y="646" width="5" height="38"/>
+          <rect x="330" y="628" width="28" height="20" rx="2"/>
+        </g>
+
+        <!-- 岛后面的暖色“萤火”：透过玻璃会被柔化 -->
+        <g fill="#E7CA90">
+          <rect x="64" y="720" width="3" height="3" opacity=".65"/>
+          <rect x="318" y="736" width="2" height="2" opacity=".55"/>
+          <rect x="116" y="752" width="2" height="2" opacity=".45"/>
+          <rect x="252" y="728" width="2" height="2" opacity=".50"/>
+          <rect x="92" y="728" width="5" height="5" opacity=".30"/>
+          <rect x="296" y="742" width="4" height="4" opacity=".28"/>
+        </g>
+
+        <rect y="700" width="390" height="144" fill="url(#bg-fade)"/>
+      </svg>
+
+      <div class="sky-glow"></div>
+      <div class="grid-overlay"></div>
+      <div class="grain"></div>
+      <div class="vignette"></div>
+      <div class="ember-glow"></div>
+    </div>
+
+    <!-- ================= 内容 ================= -->
+    <main class="content">
+
+      <!-- 仿状态栏（设计稿用） -->
+      <div class="statusbar" aria-hidden="true">
+        <span>09:41</span>
+        <div class="status-icons">
+          <svg width="16" height="12" viewBox="0 0 16 12">
+            <path d="M1.5 9.5v1M5 7.5v3M8.5 5v5.5M12 2.5v8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <svg width="16" height="12" viewBox="0 0 16 12">
+            <path d="M1.5 4.2a9.5 9.5 0 0 1 13 0M4 6.6a6 6 0 0 1 8 0M6.6 9a2.4 2.4 0 0 1 2.8 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="10.6" r=".9" fill="currentColor"/>
+          </svg>
+          <svg width="24" height="12" viewBox="0 0 24 12">
+            <rect x="1" y="1.5" width="19" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>
+            <rect x="3" y="3.5" width="13" height="5" rx="1.2" fill="currentColor"/>
+            <path d="M22 4.5v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 页头 -->
+      <header class="page-head">
+        <div>
+          <h1>世界</h1>
+          <p>4 个世界 · 上次游玩 2 天前</p>
+        </div>
+        <button class="account" type="button" aria-label="账户">
+          <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>
+        </button>
+      </header>
+
+      <!-- 当前世界 -->
+      <section class="feature" aria-labelledby="feature-title">
+        <div class="feature-art" aria-hidden="true">
+          <svg viewBox="0 0 358 192" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges">
+            <defs>
+              <linearGradient id="hero-sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#80937C"/>
+                <stop offset=".52" stop-color="#5A6D5B"/>
+                <stop offset="1" stop-color="#2F3C32"/>
+              </linearGradient>
+              <linearGradient id="hero-fade" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#0E1310" stop-opacity="0"/>
+                <stop offset=".55" stop-color="#0E1310" stop-opacity=".18"/>
+                <stop offset="1" stop-color="#0E1310" stop-opacity=".9"/>
+              </linearGradient>
+            </defs>
+
+            <rect width="358" height="192" fill="url(#hero-sky)"/>
+
+            <!-- 方块太阳：阶梯光晕，像像素画里的光 -->
+            <rect x="266" y="46" width="48" height="48" fill="#E4CFA7" opacity=".05"/>
+            <rect x="272" y="52" width="36" height="36" fill="#E7D2AA" opacity=".08"/>
+            <rect x="278" y="58" width="24" height="24" fill="#EAD6B1" opacity=".20"/>
+            <rect x="284" y="64" width="12" height="12" fill="#F0DEBE" opacity=".22"/>
+
+            <!-- 方块云 -->
+            <g fill="#E6ECE1" opacity=".13">
+              <rect x="36" y="38" width="52" height="5"/>
+              <rect x="52" y="31" width="26" height="7"/>
+              <rect x="212" y="76" width="58" height="5"/>
+              <rect x="236" y="69" width="24" height="7"/>
+            </g>
+
+            <!-- 远山 -->
+            <path d="M0 116 H28 V106 H64 V114 H104 V100 H146 V110 H188 V96 H230 V108 H272 V98 H314 V110 H358 V192 H0 Z" fill="#4B5D4D"/>
+            <!-- 中山 -->
+            <path d="M0 138 H38 V126 H82 V136 H124 V120 H168 V132 H210 V118 H252 V130 H298 V122 H358 V192 H0 Z" fill="#3A4B3D"/>
+
+            <!-- 小木屋：夜色里的一盏暖灯 -->
+            <g>
+              <rect x="244" y="124" width="44" height="30" fill="#2C241D"/>
+              <rect x="238" y="114" width="56" height="12" fill="#382D22"/>
+              <rect x="252" y="114" width="8" height="12" fill="#2A211A"/>
+              <rect x="262" y="134" width="9" height="9" fill="#E2BB78"/>
+              <rect x="262" y="134" width="9" height="2" fill="#F0D49A"/>
+              <rect x="276" y="142" width="6" height="12" fill="#1E1712"/>
+              <rect x="284" y="108" width="4" height="10" fill="#33291F"/>
+            </g>
+
+            <!-- 近山 -->
+            <path d="M0 164 H46 V150 H92 V162 H138 V146 H188 V158 H238 V148 H292 V160 H358 V192 H0 Z" fill="#29382E"/>
+
+            <!-- 树影 -->
+            <g fill="#223027">
+              <rect x="56" y="120" width="4" height="32"/>
+              <rect x="46" y="106" width="24" height="16"/>
+              <rect x="50" y="99" width="16" height="9"/>
+              <rect x="96" y="128" width="4" height="24"/>
+              <rect x="87" y="116" width="22" height="14"/>
+            </g>
+
+            <!-- 前景草沿 -->
+            <path d="M0 178 H22 V172 H48 V178 H76 V170 H108 V178 H142 V172 H176 V180 H210 V174 H246 V180 H284 V172 H320 V178 H358 V192 H0 Z" fill="#24332A"/>
+
+            <!-- 萤火 -->
+            <g fill="#EBCB8E">
+              <rect x="234" y="140" width="2" height="2" opacity=".8"/>
+              <rect x="304" y="150" width="2" height="2" opacity=".6"/>
+              <rect x="226" y="158" width="2" height="2" opacity=".45"/>
+            </g>
+
+            <rect width="358" height="192" fill="url(#hero-fade)"/>
+          </svg>
+        </div>
+
+        <div class="feature-scrim" aria-hidden="true"></div>
+
+        <span class="feature-chip">
+          <i class="chip-dot" aria-hidden="true"></i>
+          当前世界
+        </span>
+
+        <button class="feature-more" type="button" aria-label="管理 生存存档">
+          <svg class="icon icon--fill" aria-hidden="true"><use href="#i-more"/></svg>
+        </button>
+
+        <div class="feature-copy">
+          <h2 id="feature-title">生存存档</h2>
+          <p>1.21.5 · Fabric 0.16.9 · 上次游玩 2 天前</p>
+        </div>
+      </section>
+
+      <!-- 其他世界 -->
+      <div class="section-head">
+        <h2>其他世界</h2>
+        <button class="all-button" type="button">
+          全部
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+      </div>
+
+      <div class="world-list">
+        <button class="world-row" type="button">
+          <span class="thumb thumb--redstone" aria-hidden="true"></span>
+          <span class="world-copy">
+            <span class="world-title">红石实验室</span>
+            <span class="world-meta">1.20.1 · Forge 47.2.0 · 5 天前</span>
+          </span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+
+        <button class="world-row" type="button">
+          <span class="thumb thumb--sky" aria-hidden="true"></span>
+          <span class="world-copy">
+            <span class="world-title">空岛生存</span>
+            <span class="world-meta">1.21.1 · NeoForge 21.1.0 · 1 周前</span>
+          </span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+
+        <button class="world-row" type="button">
+          <span class="thumb thumb--sand" aria-hidden="true"></span>
+          <span class="world-copy">
+            <span class="world-title">创造工坊</span>
+            <span class="world-meta">1.21.4 · Fabric 0.16.5 · 2 周前</span>
+          </span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+      </div>
+
+      <p class="hint">长按世界可管理</p>
+    </main>
+
+    <!-- ================= 灵动岛 ================= -->
+    <section class="island" aria-label="当前世界快速启动">
+      <span class="block-icon" aria-hidden="true"></span>
+
+      <span class="island-copy">
+        <span class="island-version">1.21.5</span>
+        <span class="island-loader">Fabric 0.16.9</span>
+      </span>
+
+      <button class="launch" type="button" aria-label="启动 生存存档：Minecraft 1.21.5，Fabric 0.16.9">
+        <svg class="icon icon--fill" aria-hidden="true"><use href="#i-play"/></svg>
+      </button>
+    </section>
+
+    <!-- ================= 底部栏 ================= -->
+    <nav class="tabbar" aria-label="主导航">
+      <button class="tab is-active" type="button" aria-current="page">
+        <span class="tab-ind" aria-hidden="true"></span>
+        <span class="tab-icon">
+          <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+        </span>
+        <span class="tab-label">首页</span>
+      </button>
+
+      <button class="tab" type="button">
+        <span class="tab-ind" aria-hidden="true"></span>
+        <span class="tab-icon">
+          <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+        </span>
+        <span class="tab-label">下载</span>
+      </button>
+
+      <button class="tab" type="button">
+        <span class="tab-ind" aria-hidden="true"></span>
+        <span class="tab-icon">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+        </span>
+        <span class="tab-label">设置</span>
+      </button>
+    </nav>
+
+  </div>
+</div>
+
+<!-- ================= 图标精灵 ================= -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24">
+      <path d="M4.5 10.8 12 4.3l7.5 6.5V19.2A1.3 1.3 0 0 1 18.2 20.5H14.7V15.3H9.3V20.5H5.8A1.3 1.3 0 0 1 4.5 19.2Z"/>
+    </symbol>
+
+    <symbol id="i-download" viewBox="0 0 24 24">
+      <path d="M12 4v9.8M12 13.8l3.6-3.6M12 13.8 8.4 10.2"/>
+      <path d="M5 16.5v2.2A1.3 1.3 0 0 0 6.3 20h11.4a1.3 1.3 0 0 0 1.3-1.3v-2.2"/>
+    </symbol>
+
+    <symbol id="i-settings" viewBox="0 0 24 24">
+      <path d="M4 8h4M12 8h8M4 16h8M16 16h4"/>
+      <circle cx="10" cy="8" r="2"/>
+      <circle cx="14" cy="16" r="2"/>
+    </symbol>
+
+    <symbol id="i-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="3.2"/>
+      <path d="M5.6 20c.6-3.5 3-5.4 6.4-5.4s5.8 1.9 6.4 5.4"/>
+    </symbol>
+
+    <symbol id="i-chevron" viewBox="0 0 24 24">
+      <path d="m9.5 6.5 5.5 5.5-5.5 5.5"/>
+    </symbol>
+
+    <symbol id="i-more" viewBox="0 0 24 24">
+      <circle cx="6" cy="12" r="1.5"/>
+      <circle cx="12" cy="12" r="1.5"/>
+      <circle cx="18" cy="12" r="1.5"/>
+    </symbol>
+
+    <symbol id="i-play" viewBox="0 0 24 24">
+      <path d="M8.2 6.4c0-.8.87-1.28 1.54-.87l8.3 5.4c.62.4.62 1.34 0 1.74l-8.3 5.4c-.67.41-1.54-.07-1.54-.87z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<script>
+(function () {
+  'use strict';
+
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+
+  // 设计稿只演示选中态；真实页面切换由原生侧接管
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (item) {
+        var active = item === tab;
+        item.classList.toggle('is-active', active);
+        if (active) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

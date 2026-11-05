@@ -4,10 +4,14 @@
 
 当前主要内容：
 
+- **UI 设计规范 V2（纸质）**：暖灰纸 + 墨线 + 苔绿；含可运行 HTML 原型、截图、`design-tokens.css/json`、组件/布局/无障碍/实现接手文档。入口：[`docs/19-UI设计规范-Design-System/`](docs/19-UI设计规范-Design-System/README.md)。
 - **FCL 模组关系图**：读取玩家当前实例的 `mods/`，在「管理模组」页显示依赖分布，并提供原生 Canvas 关系图。
 - **无地区限制构建**：`com.tungsten.fcl.noregion` / `1.3.4.1-noregion`，arm64。
 - 本机（Android aarch64）源码构建工具链与补丁。
 - 本地实验分支：插帧宿主、JVM 垫片层（`source/` 快照里包含，但当前 APK 未启用）。
+
+> UI 设计规范是**新界面的视觉基准**（V2 纸质，竖屏）；V1 深色仅作存档。
+> 设计目录里是 HTML 原型与截图，**不是 APK**；实现进 FCL 后按 [`BUILD.md`](BUILD.md) 出包。
 
 ---
 
@@ -37,7 +41,9 @@
 .
 ├── source/                     # FCL 工作树快照（不含 .git/build/签名）
 ├── docs/
+│   ├── 19-UI设计规范-Design-System/  # UI 规范、HTML 原型、截图、design tokens
 │   ├── 17-模组关系图/          # 本功能架构、实现、测试、限制
+│   ├── 18-参考项目-Modpack-Studio/ # 关系图参考项目与 MIT 署名
 │   └── 15-最新构建/            # 无地区限制构建的来龙去脉与本机工具链
 ├── patches/
 │   ├── feature-mod-graph.patch # 模组关系图完整补丁（含新增文件）
@@ -79,6 +85,7 @@ APK 作为 Release 附件发布（不放进 git 树，避免仓库膨胀）：
 
 ## 4. 文档
 
+- [**UI 设计规范 V2（纸质）**](docs/19-UI设计规范-Design-System/README.md) · [HTML 原型](docs/19-UI设计规范-Design-System/prototypes/home-paper-v2.html) · [截图](docs/19-UI设计规范-Design-System/screenshots/home-paper-v2.png)
 - [模组关系图：架构与实现](docs/17-模组关系图/README.md)
 - [参考项目：Modpack Studio](docs/18-参考项目-Modpack-Studio/README.md)
 - [无地区限制构建与工具链](docs/15-最新构建/README.md)

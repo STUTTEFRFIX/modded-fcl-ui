@@ -1,0 +1,237 @@
+{
+  "meta": {
+    "name": "FCL UI Design System",
+    "version": "2.0.0",
+    "direction": "paper-v2",
+    "updated": "2026-11-05",
+    "status": "design-spec + html-prototype; not implemented in FCL",
+    "reference": {
+      "width": 390,
+      "height": 844,
+      "unit": "dp",
+      "note": "1 CSS px ~= 1 dp at 390dp reference width; text uses sp on Android"
+    },
+    "prototype": "prototypes/home-paper-v2.html",
+    "screenshots": [
+      "screenshots/home-paper-v2.png",
+      "screenshots/home-paper-v2-desktop.png"
+    ]
+  },
+  "color": {
+    "paper": {
+      "0": "#F1EEE6",
+      "1": "#EAE6DB",
+      "2": "#E2DDD1",
+      "card": "#F8F6EF"
+    },
+    "ink": {
+      "primary": "#2C2E28",
+      "secondary": "#55584C",
+      "tertiary": "#5F6256"
+    },
+    "accent": {
+      "fill": "#7F9470",
+      "ink": "#4C6143",
+      "wash": "#E2E7D8",
+      "on": "#F8F3E7"
+    },
+    "line": {
+      "subtle": "rgba(74,68,54,0.14)",
+      "strong": "rgba(74,68,54,0.24)"
+    },
+    "glass": {
+      "fillTop": "rgba(252,249,242,0.64)",
+      "fillBottom": "rgba(238,233,222,0.72)",
+      "edge": "rgba(255,255,255,0.78)",
+      "solidFallback": "#F7F4EC",
+      "blur": 26,
+      "saturate": 1.15
+    },
+    "state": {
+      "focus": "#4C6143",
+      "pressed": "rgba(74,68,54,0.05)",
+      "pressedStrong": "rgba(74,68,54,0.08)",
+      "disabledInk": "rgba(44,46,40,0.38)",
+      "disabledSurface": "rgba(44,46,40,0.06)",
+      "scrim": "rgba(44,46,40,0.28)"
+    },
+    "semantic": {
+      "error": "#8C4F3F",
+      "errorSurface": "#F0E2DA",
+      "warning": "#7A5A32",
+      "warningSurface": "#F2E8D6",
+      "success": "#4C6143",
+      "successSurface": "#E2E7D8",
+      "info": "#4E5A66",
+      "infoSurface": "#E7EBEE"
+    },
+    "illustration": {
+      "rust": "#A8795E",
+      "amber": "#C3935A",
+      "sage": "#8FA37C",
+      "olive": "#78886B",
+      "deep": "#5E6E56",
+      "soil": "#8A6F55",
+      "wood": "#7A5D47",
+      "cloud": "#F7F3E9"
+    }
+  },
+  "typography": {
+    "family": "system-ui, -apple-system, \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif",
+    "weights": {
+      "regular": 400,
+      "medium": 500,
+      "semiBold": 600
+    },
+    "roles": {
+      "display": { "size": 32, "lineHeight": 40, "weight": 600, "usage": "页面标题「世界」" },
+      "title": { "size": 22, "lineHeight": 28, "weight": 600, "usage": "明信片世界名" },
+      "body": { "size": 16, "lineHeight": 24, "weight": 400, "usage": "正文" },
+      "bodyStrong": { "size": 16, "lineHeight": 24, "weight": 500, "usage": "世界行标题" },
+      "label": { "size": 14, "lineHeight": 20, "weight": 500, "usage": "底栏 / chip / 文字按钮" },
+      "meta": { "size": 14, "lineHeight": 20, "weight": 400, "usage": "版本 / 加载器 / 上次游玩" },
+      "islandVersion": { "size": 16, "lineHeight": 20, "weight": 600, "usage": "灵动岛版本号" },
+      "islandLoader": { "size": 14, "lineHeight": 18, "weight": 400, "usage": "灵动岛加载器" },
+      "status": { "size": 14, "lineHeight": 20, "weight": 600, "usage": "设计稿仿制状态栏" }
+    },
+    "rules": {
+      "minBodySize": 16,
+      "minLabelSize": 14,
+      "cjkLetterSpacing": "0",
+      "latinLetterSpacing": "0.01em",
+      "maxBodyLines": 1,
+      "negativeTrackingOnCjk": false
+    }
+  },
+  "spacing": {
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 20,
+    "6": 24,
+    "7": 32,
+    "8": 40
+  },
+  "radius": {
+    "thumb": 12,
+    "row": 16,
+    "postcard": 20,
+    "barTop": 28,
+    "pill": 999
+  },
+  "layout": {
+    "referenceWidth": 390,
+    "referenceHeight": 844,
+    "contentInset": 16,
+    "chromeInset": 12,
+    "statusHeight": 44,
+    "headerHeight": 98,
+    "postcardHeight": 188,
+    "sectionHeadHeight": 44,
+    "rowHeight": 70,
+    "contentEnd": 672,
+    "islandTop": 696,
+    "breathingGap": 24,
+    "islandHeight": 64,
+    "barHeight": 72,
+    "contentBottomPadding": 160,
+    "maxContentWidth": 430,
+    "breakpoints": [320, 360, 390, 430, 600]
+  },
+  "motion": {
+    "duration": {
+      "press": 120,
+      "ui": 240,
+      "enter": 480,
+      "barEnter": 520,
+      "barDelay": 60,
+      "tabFade": 200,
+      "tabMove": 260
+    },
+    "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+    "allowedProperties": ["transform", "opacity", "color", "background-color", "border-color"],
+    "forbidden": ["transition: all", "width/height + backdrop-filter animation", "infinite loops"],
+    "reducedMotion": "disable translate/scale; keep 200ms color/opacity"
+  },
+  "components": {
+    "island": {
+      "height": 64,
+      "sideInset": 12,
+      "bottomGap": 12,
+      "paddingX": 12,
+      "gap": 12,
+      "icon": 40,
+      "iconRadius": 12,
+      "launchHit": 48,
+      "launchVisual": 44,
+      "blur": 26,
+      "saturate": 1.15,
+      "border": 1,
+      "shadow": "0 14px 32px rgba(80,70,55,0.18)"
+    },
+    "bottomBar": {
+      "height": 72,
+      "topRadius": 28,
+      "padding": 8,
+      "tabMinHeight": 54,
+      "icon": 24,
+      "labelSize": 14,
+      "indicatorWidth": 52,
+      "indicatorHeight": 30,
+      "indicatorTop": 4
+    },
+    "postcard": {
+      "height": 188,
+      "artHeight": 112,
+      "captionHeight": 74,
+      "radius": 20,
+      "chipHeight": 28,
+      "moreSize": 44
+    },
+    "worldRow": {
+      "height": 70,
+      "radius": 16,
+      "thumb": 44,
+      "thumbRadius": 12,
+      "padding": 12,
+      "gap": 12
+    },
+    "iconButton": {
+      "size": 44,
+      "icon": 22
+    },
+    "launch": {
+      "hit": 48,
+      "visual": 44,
+      "icon": 22
+    }
+  },
+  "accessibility": {
+    "minBodyContrast": 4.5,
+    "minLargeContrast": 3,
+    "minGraphicContrast": 3,
+    "minTouch": 44,
+    "primaryTouch": 48,
+    "focusRingWidth": 2,
+    "focusRingOffset": 3,
+    "focusRingColor": "#4C6143",
+    "fontScaleTest": [1.0, 1.3, 2.0]
+  },
+  "contrast": {
+    "inkOnCard": 12.70,
+    "inkOnPaper0": 11.85,
+    "inkOnIsland": 11.87,
+    "ink2OnCard": 6.73,
+    "ink3OnCard": 5.77,
+    "ink3OnPaper1": 5.00,
+    "ink3OnPaper2": 4.60,
+    "ink3OnBar": 5.62,
+    "accentInkOnCard": 6.27,
+    "accentInkOnWash": 5.38,
+    "onAccentOnAccentInk": 6.12,
+    "statusOnPaper0": 7.45,
+    "accentFillOnCard": 3.05,
+    "note": "accentFill is decorative only; not a text color"
+  }
+}
