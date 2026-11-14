@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EDEAE1">
+<meta name="color-scheme" content="light">
+<title>FCL 主页 · 纸质灵动岛 V2</title>
+<!--
+  FCL 主页 · 灵动岛 V2 · 纸质版（2026-11-05）
+  ────────────────────────────────────────────────────────────
+  和 V1 的区别：
+  - 整体面料从“深色烟玻璃”改为暖灰纸：哑光、纤维、压印、纸边。
+  - 主要内容卡改成“明信片”：上图画、下纸签；文字不再压在插画上。
+  - 底栏是实体纸，不再模糊；只有灵动岛是乳白磨砂玻璃（纸上的硫酸纸）。
+  - 配色收敛为：纸 / 墨 / 苔绿 / 淡锈，内容插画才用暖色。
+  规格与取舍见同目录 README.md。
+-->
+<style>
+/* ==========================================================================
+   0. 设计 token：纸、墨、苔绿
+   ========================================================================== */
+:root{
+  color-scheme: light;
+
+  /* 纸 */
+  --paper-0:      #F1EEE6;
+  --paper-1:      #EAE6DB;
+  --paper-2:      #E2DDD1;
+  --card:         #F8F6EF;
+
+  /* 墨 */
+  --ink:          #2C2E28;
+  --ink-2:        #55584C;
+  --ink-3:        #5F6256;
+
+  /* 苔绿：唯一的 UI 强调色 */
+  --accent:       #7F9470;
+  --accent-ink:   #4C6143;
+  --accent-wash:  #E2E7D8;
+  --on-accent:    #F8F3E7;
+
+
+  /* 线与玻璃 */
+  --line:         rgba(74, 68, 54, .14);
+  --line-strong:  rgba(74, 68, 54, .24);
+  --glass-edge:   rgba(255, 255, 255, .78);
+  --glass-fill:   linear-gradient(145deg, rgba(252, 249, 242, .64), rgba(238, 233, 222, .72));
+
+  /* 同心圆角 */
+  --r-xs: 12px;
+  --r-sm: 16px;
+  --r-md: 20px;
+  --r-lg: 28px;
+  --r-pill: 999px;
+
+  /* 4px 间距 */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s8: 40px;
+
+  /* 字号：正文 16，辅助 14，不低于 14 */
+  --fs-h1: 32px;   --lh-h1: 40px;
+  --fs-h2: 22px;   --lh-h2: 28px;
+  --fs-body: 16px; --lh-body: 24px;
+  --fs-meta: 14px; --lh-meta: 20px;
+  --fs-label: 14px;--lh-label: 20px;
+
+  /* 动效 */
+  --dur-press: 120ms;
+  --dur-ui: 240ms;
+  --dur-enter: 480ms;
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+
+  /* 固定 chrome */
+  --bar-h: 72px;
+  --island-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+*{ box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body{ height: 100%; }
+
+body{
+  /* 桌面端：纸张放在一张深色木桌面上 */
+  background: radial-gradient(80% 80% at 50% 18%, #3A342B 0%, #221F1A 70%, #171512 100%);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+button{
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible{
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+
+svg{ display: block; }
+
+.sprite{ position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon{
+  width: 24px; height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon--fill{ fill: currentColor; stroke: none; }
+
+/* ==========================================================================
+   1. 舞台与纸面
+   ========================================================================== */
+.stage{
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+}
+
+.screen{
+  position: relative;
+  width: 100%;
+  height: 100vh;          /* 老 WebView 回退 */
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper-0);
+  isolation: isolate;
+}
+
+/* 桌面端：像一本纸册放在桌面上 */
+@media (min-width: 720px){
+  .stage{ padding: 24px; }
+  .screen{
+    width: 390px;
+    height: min(844px, calc(100dvh - 48px));
+    border-radius: 44px;
+    box-shadow:
+      0 44px 90px rgba(0, 0, 0, .55),
+      0 0 0 1px rgba(255, 255, 255, .07),
+      inset 0 0 0 1px rgba(255, 255, 255, .35);
+  }
+}
+
+/* ==========================================================================
+   2. 纸面：底色、纤维、帘纹、水印、纸边
+   ========================================================================== */
+.backdrop{
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--paper-0) 0%, var(--paper-1) 55%, var(--paper-2) 100%);
+}
+
+/* 底部极淡的方块山谷水印：纸上的印刷底纹 */
+.watermark{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 从上方照下来的柔和纸面光 */
+.paper-light{
+  position: absolute;
+  inset: -16% -12% auto -12%;
+  height: 58%;
+  background: radial-gradient(58% 52% at 72% 0%, rgba(255, 252, 245, .68), rgba(255, 252, 245, 0) 70%);
+  pointer-events: none;
+}
+
+/* 帘纹 / 直纹：很淡的纸张纤维方向 */
+.laid-lines{
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(100, 90, 70, .035) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(100, 90, 70, .020) 0 1px, transparent 1px 112px);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, .8) 0%, rgba(0, 0, 0, .25) 58%, transparent 100%);
+          mask-image: linear-gradient(180deg, rgba(0, 0, 0, .8) 0%, rgba(0, 0, 0, .25) 58%, transparent 100%);
+  opacity: .55;
+  pointer-events: none;
+}
+
+/* 纸边：轻微变暗，像一张压平的纸 */
+.paper-edge{
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 40%, transparent 58%, rgba(110, 100, 80, .08) 100%),
+    linear-gradient(180deg, rgba(110, 100, 80, .05) 0%, transparent 16%, transparent 84%, rgba(100, 90, 70, .08) 100%);
+  pointer-events: none;
+}
+
+/* 全屏纸纤维：覆盖在 UI 之上，统一所有材质的“印刷感” */
+.screen::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  opacity: .05;
+  mix-blend-mode: multiply;
+}
+
+/* ==========================================================================
+   3. 内容
+   ========================================================================== */
+.content{
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--s4) calc(var(--bar-h) + var(--island-h) + var(--s6) + var(--safe-bottom));
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.content::-webkit-scrollbar{ display: none; }
+
+.statusbar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding-top: max(env(safe-area-inset-top, 0px), 10px);
+  padding-bottom: var(--s1);
+  color: #4A4D42;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-icons{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: .85;
+}
+
+.page-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s5) 0 var(--s4);
+}
+
+.page-head h1{
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+  /* 纸面压印：极轻的 1px 高光，不是投影 */
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+}
+
+.page-head p{
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 400;
+}
+
+.account{
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink-2);
+  background: linear-gradient(180deg, #FAF8F1, #F1EDE3);
+  border: 1px solid var(--line);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .8),
+    0 3px 8px rgba(70, 62, 48, .10);
+  transition: transform var(--dur-press) var(--ease-out),
+              background-color var(--dur-ui) var(--ease-out);
+}
+.account:active{ transform: scale(.95); }
+.account .icon{ width: 22px; height: 22px; }
+
+/* ==========================================================================
+   4. 明信片主视觉：上图画、下纸签
+   ========================================================================== */
+.feature{
+  position: relative;
+  height: 188px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 12px 26px rgba(70, 62, 48, .12),
+    inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.feature-art{
+  position: relative;
+  height: 112px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: #E4DED0;
+}
+.feature-art svg{ width: 100%; height: 100%; }
+
+.feature-chip{
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  background: rgba(250, 247, 240, .92);
+  border: 1px solid rgba(74, 68, 54, .18);
+  box-shadow: 0 2px 6px rgba(70, 62, 48, .10);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 500;
+}
+
+.chip-dot{
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(127, 148, 112, .16);
+}
+
+.feature-more{
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink-2);
+  background: rgba(250, 247, 240, .92);
+  border: 1px solid rgba(74, 68, 54, .18);
+  box-shadow: 0 3px 8px rgba(70, 62, 48, .12);
+  transition: transform var(--dur-press) var(--ease-out),
+              background-color var(--dur-ui) var(--ease-out);
+}
+.feature-more:active{ transform: scale(.94); }
+.feature-more .icon{ width: 20px; height: 20px; }
+
+.feature-caption{
+  display: grid;
+  gap: 2px;
+  padding: var(--s3) var(--s4);
+}
+.feature-caption h2{
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  font-weight: 600;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+}
+.feature-caption p{
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   5. 世界列表：纸卡 + 小张印刷缩略图
+   ========================================================================== */
+.section-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  margin: var(--s4) 0 var(--s3);
+}
+.section-head h2{
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.all-button{
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding-left: var(--s3);
+  border-radius: var(--s2);
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 500;
+  transition: color var(--dur-ui) var(--ease-out);
+}
+.all-button:active{ color: var(--ink); }
+.all-button .icon{ width: 16px; height: 16px; stroke-width: 2; }
+
+.world-list{
+  display: grid;
+  gap: var(--s3);
+}
+
+.world-row{
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 70px;
+  padding: var(--s3);
+  border-radius: var(--r-sm);
+  text-align: left;
+  background: linear-gradient(180deg, #FAF8F2, #F4F1E8);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 4px 12px rgba(70, 62, 48, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .75);
+  transition: background-color var(--dur-ui) var(--ease-out),
+              border-color var(--dur-ui) var(--ease-out);
+}
+.world-row:active{
+  background: linear-gradient(180deg, #F3F1E9, #ECE8DE);
+  border-color: var(--line-strong);
+}
+
+.world-copy{
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.world-title{
+  display: block;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.world-meta{
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron{
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+  opacity: .75;
+  stroke-width: 2;
+}
+
+/* 缩略图：像三张小印刷品，带 2px 纸边 */
+.thumb{
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  border: 1px solid rgba(74, 68, 54, .16);
+  box-shadow:
+    inset 0 0 0 2px rgba(250, 247, 240, .52),
+    inset 0 1px 0 rgba(255, 255, 255, .4);
+}
+.thumb::before,
+.thumb::after{
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+/* 红石洞窟：淡锈 + 灰褐 */
+.thumb--redstone{
+  background: linear-gradient(180deg, #D3C0AF 0 40%, #8C7362 100%);
+}
+.thumb--redstone::before{
+  inset: 0;
+  background: radial-gradient(60% 55% at 68% 34%, rgba(168, 100, 74, .48), transparent 70%);
+}
+.thumb--redstone::after{
+  left: -6%;
+  right: -6%;
+  bottom: 0;
+  height: 54%;
+  background: linear-gradient(90deg, #7E6354 0 28%, #6E5446 28% 55%, #826858 55% 78%, #5E4A3E 78%);
+  clip-path: polygon(0 46%, 16% 46%, 16% 26%, 34% 26%, 34% 50%, 52% 50%, 52% 30%, 72% 30%, 72% 54%, 88% 54%, 88% 38%, 100% 38%, 100% 100%, 0 100%);
+}
+
+/* 空岛：淡青灰 + 苔绿 + 土色 */
+.thumb--sky{
+  background: linear-gradient(180deg, #DCE5E1 0%, #B9CCC6 100%);
+}
+.thumb--sky::before{
+  left: 12%;
+  top: 18%;
+  width: 20px;
+  height: 5px;
+  border-radius: 1px;
+  background: #F7F4EC;
+  opacity: .85;
+  box-shadow: 11px -5px 0 -1px #F7F4EC, 3px 5px 0 -1px #F7F4EC;
+}
+.thumb--sky::after{
+  left: 22%;
+  right: 22%;
+  bottom: 16%;
+  height: 32%;
+  background: linear-gradient(180deg, #8FA37C 0 30%, #8A6F55 30% 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 82% 45%, 82% 72%, 64% 72%, 64% 100%, 44% 100%, 44% 72%, 26% 72%, 26% 45%, 0 45%);
+}
+
+/* 沙岩峡谷：赭石印刷 */
+.thumb--sand{
+  background: linear-gradient(180deg, #E0C9A4 0 42%, #C1A173 100%);
+}
+.thumb--sand::before{
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0 18%, rgba(255, 255, 255, .22) 18% 20%, transparent 20% 100%);
+}
+.thumb--sand::after{
+  left: -8%;
+  right: -8%;
+  bottom: 0;
+  height: 58%;
+  background: linear-gradient(90deg, #A9855D 0 30%, #B08C62 30% 62%, #8B6A4B 62% 100%);
+  clip-path: polygon(0 38%, 14% 38%, 14% 20%, 30% 20%, 30% 42%, 46% 42%, 46% 26%, 64% 26%, 64% 46%, 82% 46%, 82% 30%, 100% 30%, 100% 100%, 0 100%);
+}
+
+.hint{
+  margin-top: var(--s4);
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  text-align: left;
+}
+
+/* ==========================================================================
+   6. 乳白磨砂灵动岛：整屏唯一的玻璃
+   ========================================================================== */
+.island{
+  position: absolute;
+  z-index: 30;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--bar-h) + var(--safe-bottom) + 12px);
+  height: var(--island-h);
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 var(--s3);
+  border-radius: var(--r-pill);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(26px) saturate(115%);
+          backdrop-filter: blur(26px) saturate(115%);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .92),
+    inset 0 -1px 0 rgba(120, 105, 85, .08),
+    0 14px 32px rgba(80, 70, 55, .18);
+  animation: chrome-in var(--dur-enter) var(--ease-out) both;
+}
+
+/* 斜向柔光：乳白玻璃被光照到的感觉，不做强高光 */
+.island::after{
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 0;
+  height: 58%;
+  border-radius: inherit;
+  background: linear-gradient(115deg, rgba(255, 255, 255, .36) 0%, rgba(255, 255, 255, .06) 38%, rgba(255, 255, 255, 0) 58%);
+  pointer-events: none;
+  opacity: .75;
+}
+
+.island > *{ position: relative; z-index: 1; }
+
+/* 世界图标：印刷感的草方块 */
+.block-icon{
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  background: linear-gradient(180deg, #94A87F 0 32%, #7D9269 32% 38%, #A1805F 38% 100%);
+  border: 1px solid rgba(255, 255, 255, .72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .55),
+    inset 0 -2px 4px rgba(80, 60, 40, .18),
+    0 2px 6px rgba(70, 60, 45, .16);
+}
+.block-icon::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, rgba(60, 55, 40, .08) 1px, transparent 1px),
+    linear-gradient(rgba(60, 55, 40, .10) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+.block-icon::after{
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 29%;
+  height: 9px;
+  background: linear-gradient(180deg, #94A87F 0 48%, #6F855D 48% 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 88% 55%, 88% 100%, 75% 100%, 75% 55%, 62% 55%, 62% 100%, 50% 100%, 50% 55%, 38% 55%, 38% 100%, 25% 100%, 25% 55%, 12% 55%, 12% 100%, 0 100%);
+}
+
+.island-copy{
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.island-version{
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.island-loader{
+  font-size: var(--fs-meta);
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 启动：深苔绿“印章”，视觉 44 / 热区 48 */
+.launch{
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: none;
+  transition: transform var(--dur-press) var(--ease-out),
+              filter var(--dur-ui) var(--ease-out);
+}
+.launch::before{
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    inset 0 -2px 3px rgba(0, 0, 0, .12),
+    0 3px 10px rgba(76, 97, 67, .24);
+}
+.launch:active{ transform: scale(.94); filter: brightness(.96); }
+.launch:focus-visible{ outline-color: var(--ink); outline-offset: 2px; }
+.launch .icon{ position: relative; z-index: 1; width: 22px; height: 22px; }
+
+/* ==========================================================================
+   7. 底部栏：实体纸，不再模糊
+   ========================================================================== */
+.tabbar{
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--bar-h) + var(--safe-bottom));
+  display: flex;
+  align-items: stretch;
+  padding: var(--s2) var(--s2) calc(var(--s2) + var(--safe-bottom));
+  background: linear-gradient(180deg, #F6F3EA, #EFEBE1);
+  border-top: 1px solid #D6D0C1;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow:
+    0 -10px 24px rgba(80, 70, 55, .10),
+    inset 0 1px 0 #FFFDF8,
+    inset 0 -1px 0 rgba(100, 90, 70, .06);
+  animation: chrome-in 520ms var(--ease-out) 60ms both;
+}
+
+.tab{
+  position: relative;
+  flex: 1;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 14px;
+  color: var(--ink-3);
+  transition: color var(--dur-ui) var(--ease-out),
+              background-color var(--dur-ui) var(--ease-out);
+}
+.tab:active{ background: rgba(74, 68, 54, .05); }
+
+/* 选中：像在纸上盖了一个浅苔绿的印 */
+.tab-ind{
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 52px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  background: var(--accent-wash);
+  border: 1px solid #CBD3BF;
+  opacity: 0;
+  transform: translateX(-50%) scale(.92);
+  transition: opacity 200ms var(--ease-out),
+              transform 260ms var(--ease-out);
+}
+.tab.is-active{ color: var(--accent-ink); }
+.tab.is-active .tab-ind{ opacity: 1; transform: translateX(-50%) scale(1); }
+
+.tab-icon{
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+}
+.tab-label{
+  position: relative;
+  z-index: 1;
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 500;
+  letter-spacing: .01em;
+}
+
+/* ==========================================================================
+   8. 动效
+   ========================================================================== */
+@keyframes chrome-in{
+  from{ opacity: 0; transform: translateY(9px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+@media (hover: hover) and (pointer: fine){
+  .tab:hover{ background: rgba(74, 68, 54, .05); }
+  .world-row:hover{ border-color: var(--line-strong); }
+  .all-button:hover{ color: var(--ink); }
+  .account:hover{ background: linear-gradient(180deg, #FFFDF8, #F5F1E8); }
+  .feature-more:hover{ background: rgba(255, 253, 248, .98); }
+  .launch:hover{ filter: brightness(1.05); }
+}
+
+/* ==========================================================================
+   9. 降级与可访问性
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce){
+  .island,
+  .tabbar{ animation: none; }
+
+  .account,
+  .feature-more,
+  .launch{ transition: filter var(--dur-ui) linear; }
+  .account:active,
+  .feature-more:active,
+  .launch:active{ transform: none; }
+
+  .tab,
+  .tab-ind,
+  .world-row,
+  .all-button{ transition-duration: 200ms; transition-timing-function: linear; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+  .island{ background: #F7F4EC; }
+}
+
+@media (prefers-reduced-transparency: reduce){
+  .island{
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+    background: #F7F4EC;
+  }
+}
+
+@media (prefers-contrast: more){
+  :root{
+    --ink: #1E201B;
+    --ink-2: #3F4237;
+    --ink-3: #4B4E42;
+    --line: rgba(74, 68, 54, .26);
+    --line-strong: rgba(74, 68, 54, .38);
+  }
+  .island{ border-color: rgba(74, 68, 54, .38); }
+  .tabbar{ border-top-color: rgba(74, 68, 54, .38); }
+}
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="screen" aria-label="FCL 启动器纸质主界面设计稿">
+
+    <!-- ================= 纸面 ================= -->
+    <div class="backdrop" aria-hidden="true">
+      <svg class="watermark" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
+        <!-- 极淡的方块山谷印刷水印 -->
+        <g fill="#4C6143">
+          <path d="M0 700 H44 V682 H96 V696 H146 V668 H200 V690 H252 V664 H310 V688 H360 V674 H390 V844 H0 Z" opacity=".05"/>
+          <path d="M0 748 H36 V730 H84 V746 H132 V722 H184 V742 H236 V718 H292 V740 H344 V724 H390 V844 H0 Z" opacity=".045"/>
+          <rect x="52" y="660" width="4" height="34" opacity=".045"/>
+          <rect x="42" y="646" width="24" height="18" rx="2" opacity=".045"/>
+          <rect x="318" y="666" width="4" height="30" opacity=".045"/>
+          <rect x="308" y="654" width="22" height="16" rx="2" opacity=".045"/>
+        </g>
+        <circle cx="300" cy="120" r="64" fill="#C3935A" opacity=".045"/>
+        <circle cx="300" cy="120" r="38" fill="#C3935A" opacity=".04"/>
+      </svg>
+
+      <div class="paper-light"></div>
+      <div class="laid-lines"></div>
+      <div class="paper-edge"></div>
+    </div>
+
+    <!-- ================= 内容 ================= -->
+    <main class="content">
+
+      <div class="statusbar" aria-hidden="true">
+        <span>09:41</span>
+        <div class="status-icons">
+          <svg width="16" height="12" viewBox="0 0 16 12">
+            <path d="M1.5 9.5v1M5 7.5v3M8.5 5v5.5M12 2.5v8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <svg width="16" height="12" viewBox="0 0 16 12">
+            <path d="M1.5 4.2a9.5 9.5 0 0 1 13 0M4 6.6a6 6 0 0 1 8 0M6.6 9a2.4 2.4 0 0 1 2.8 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="10.6" r=".9" fill="currentColor"/>
+          </svg>
+          <svg width="24" height="12" viewBox="0 0 24 12">
+            <rect x="1" y="1.5" width="19" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>
+            <rect x="3" y="3.5" width="13" height="5" rx="1.2" fill="currentColor"/>
+            <path d="M22 4.5v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
+          </svg>
+        </div>
+      </div>
+
+      <header class="page-head">
+        <div>
+          <h1>世界</h1>
+          <p>4 个世界 · 上次游玩 2 天前</p>
+        </div>
+        <button class="account" type="button" aria-label="账户">
+          <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>
+        </button>
+      </header>
+
+      <!-- 明信片：上图画、下纸签 -->
+      <section class="feature" aria-labelledby="feature-title">
+        <div class="feature-art">
+          <svg viewBox="0 0 358 112" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges" aria-hidden="true">
+            <defs>
+              <linearGradient id="paper-sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#E8E2D3"/>
+                <stop offset=".55" stop-color="#DCD4C2"/>
+                <stop offset="1" stop-color="#C9C1AD"/>
+              </linearGradient>
+            </defs>
+
+            <rect width="358" height="112" fill="url(#paper-sky)"/>
+
+            <!-- 方块太阳：淡锈色的印刷太阳 -->
+            <rect x="194" y="24" width="48" height="48" fill="#C08B67" opacity=".05"/>
+            <rect x="200" y="30" width="36" height="36" fill="#C08B67" opacity=".08"/>
+            <rect x="206" y="36" width="24" height="24" fill="#C08B67" opacity=".45"/>
+            <rect x="210" y="40" width="16" height="16" fill="#D8A970" opacity=".30"/>
+
+            <!-- 纸面云 -->
+            <g fill="#F7F3E9" opacity=".55">
+              <rect x="34" y="26" width="48" height="5"/>
+              <rect x="48" y="20" width="24" height="6"/>
+              <rect x="276" y="54" width="54" height="4"/>
+              <rect x="298" y="48" width="22" height="6"/>
+            </g>
+
+            <!-- 远山 / 中山 / 近山 -->
+            <path d="M0 72 H26 V64 H60 V70 H100 V60 H140 V68 H182 V58 H224 V66 H266 V60 H306 V68 H358 V112 H0 Z" fill="#AFB8A2"/>
+            <path d="M0 84 H36 V76 H78 V82 H120 V72 H164 V80 H206 V70 H250 V78 H294 V72 H358 V112 H0 Z" fill="#94A285"/>
+            <path d="M0 96 H44 V88 H90 V94 H136 V84 H184 V92 H232 V84 H280 V90 H328 V86 H358 V112 H0 Z" fill="#78886B"/>
+
+            <!-- 小木屋与暖窗 -->
+            <g>
+              <rect x="250" y="62" width="40" height="26" fill="#7A5D47"/>
+              <rect x="244" y="54" width="52" height="10" fill="#6A4F3B"/>
+              <rect x="254" y="54" width="7" height="10" fill="#5C4535"/>
+              <rect x="266" y="70" width="9" height="8" fill="#C9945F"/>
+              <rect x="266" y="70" width="9" height="2" fill="#D8A970"/>
+              <rect x="279" y="77" width="6" height="11" fill="#4E3D2F"/>
+              <rect x="286" y="50" width="4" height="9" fill="#5C4535"/>
+            </g>
+
+            <!-- 树影 -->
+            <g fill="#4F6049">
+              <rect x="56" y="64" width="4" height="30"/>
+              <rect x="46" y="52" width="24" height="15"/>
+              <rect x="50" y="46" width="16" height="9"/>
+              <rect x="96" y="70" width="4" height="24"/>
+              <rect x="87" y="58" width="22" height="14"/>
+              <rect x="322" y="74" width="3" height="22"/>
+              <rect x="314" y="64" width="18" height="13" rx="1"/>
+              <rect x="318" y="59" width="11" height="7" rx="1" fill="#5B6E53"/>
+            </g>
+
+            <!-- 小屋前的小路：把视线从门引到前景 -->
+            <path d="M276 88 H288 V94 H292 V100 H298 V106 H304 V112 H266 V106 H272 V100 H276 V94 Z" fill="#C2B195" opacity=".5"/>
+
+            <!-- 前景草沿 -->
+            <path d="M0 104 H22 V99 H50 V104 H80 V98 H112 V104 H146 V100 H180 V105 H214 V101 H250 V105 H286 V100 H320 V104 H358 V112 H0 Z" fill="#5E6E56"/>
+
+            <!-- 前景草簇 -->
+            <g fill="#7C8C6C">
+              <rect x="30" y="100" width="3" height="2"/>
+              <rect x="120" y="101" width="2" height="2"/>
+              <rect x="200" y="99" width="3" height="2"/>
+              <rect x="330" y="101" width="2" height="2"/>
+            </g>
+
+            <!-- 萤火 -->
+            <g fill="#C9945F">
+              <rect x="236" y="62" width="2" height="2" opacity=".7"/>
+              <rect x="310" y="72" width="2" height="2" opacity=".5"/>
+              <rect x="228" y="88" width="2" height="2" opacity=".4"/>
+            </g>
+          </svg>
+
+          <span class="feature-chip">
+            <i class="chip-dot" aria-hidden="true"></i>
+            当前世界
+          </span>
+
+          <button class="feature-more" type="button" aria-label="管理 生存存档">
+            <svg class="icon icon--fill" aria-hidden="true"><use href="#i-more"/></svg>
+          </button>
+        </div>
+
+        <div class="feature-caption">
+          <h2 id="feature-title">生存存档</h2>
+          <p>1.21.5 · Fabric 0.16.9 · 上次游玩 2 天前</p>
+        </div>
+      </section>
+
+      <div class="section-head">
+        <h2>其他世界</h2>
+        <button class="all-button" type="button">
+          全部
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+      </div>
+
+      <div class="world-list">
+        <button class="world-row" type="button">
+          <span class="thumb thumb--redstone" aria-hidden="true"></span>
+          <span class="world-copy">
+            <span class="world-title">红石实验室</span>
+            <span class="world-meta">1.20.1 · Forge 47.2.0 · 5 天前</span>
+          </span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+
+        <button class="world-row" type="button">
+          <span class="thumb thumb--sky" aria-hidden="true"></span>
+          <span class="world-copy">
+            <span class="world-title">空岛生存</span>
+            <span class="world-meta">1.21.1 · NeoForge 21.1.0 · 1 周前</span>
+          </span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+
+        <button class="world-row" type="button">
+          <span class="thumb thumb--sand" aria-hidden="true"></span>
+          <span class="world-copy">
+            <span class="world-title">创造工坊</span>
+            <span class="world-meta">1.21.4 · Fabric 0.16.5 · 2 周前</span>
+          </span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+      </div>
+
+      <p class="hint">长按世界可管理</p>
+    </main>
+
+    <!-- ================= 乳白玻璃灵动岛 ================= -->
+    <section class="island" aria-label="当前世界快速启动">
+      <span class="block-icon" aria-hidden="true"></span>
+
+      <span class="island-copy">
+        <span class="island-version">1.21.5</span>
+        <span class="island-loader">Fabric 0.16.9</span>
+      </span>
+
+      <button class="launch" type="button" aria-label="启动 生存存档：Minecraft 1.21.5，Fabric 0.16.9">
+        <svg class="icon icon--fill" aria-hidden="true"><use href="#i-play"/></svg>
+      </button>
+    </section>
+
+    <!-- ================= 纸质底栏 ================= -->
+    <nav class="tabbar" aria-label="主导航">
+      <button class="tab is-active" type="button" aria-current="page">
+        <span class="tab-ind" aria-hidden="true"></span>
+        <span class="tab-icon">
+          <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+        </span>
+        <span class="tab-label">首页</span>
+      </button>
+
+      <button class="tab" type="button">
+        <span class="tab-ind" aria-hidden="true"></span>
+        <span class="tab-icon">
+          <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+        </span>
+        <span class="tab-label">下载</span>
+      </button>
+
+      <button class="tab" type="button">
+        <span class="tab-ind" aria-hidden="true"></span>
+        <span class="tab-icon">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+        </span>
+        <span class="tab-label">设置</span>
+      </button>
+    </nav>
+
+  </div>
+</div>
+
+<!-- ================= 图标精灵 ================= -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24">
+      <path d="M4.5 10.8 12 4.3l7.5 6.5V19.2A1.3 1.3 0 0 1 18.2 20.5H14.7V15.3H9.3V20.5H5.8A1.3 1.3 0 0 1 4.5 19.2Z"/>
+    </symbol>
+
+    <symbol id="i-download" viewBox="0 0 24 24">
+      <path d="M12 4v9.8M12 13.8l3.6-3.6M12 13.8 8.4 10.2"/>
+      <path d="M5 16.5v2.2A1.3 1.3 0 0 0 6.3 20h11.4a1.3 1.3 0 0 0 1.3-1.3v-2.2"/>
+    </symbol>
+
+    <symbol id="i-settings" viewBox="0 0 24 24">
+      <path d="M4 8h4M12 8h8M4 16h8M16 16h4"/>
+      <circle cx="10" cy="8" r="2"/>
+      <circle cx="14" cy="16" r="2"/>
+    </symbol>
+
+    <symbol id="i-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="3.2"/>
+      <path d="M5.6 20c.6-3.5 3-5.4 6.4-5.4s5.8 1.9 6.4 5.4"/>
+    </symbol>
+
+    <symbol id="i-chevron" viewBox="0 0 24 24">
+      <path d="m9.5 6.5 5.5 5.5-5.5 5.5"/>
+    </symbol>
+
+    <symbol id="i-more" viewBox="0 0 24 24">
+      <circle cx="6" cy="12" r="1.5"/>
+      <circle cx="12" cy="12" r="1.5"/>
+      <circle cx="18" cy="12" r="1.5"/>
+    </symbol>
+
+    <symbol id="i-play" viewBox="0 0 24 24">
+      <path d="M8.2 6.4c0-.8.87-1.28 1.54-.87l8.3 5.4c.62.4.62 1.34 0 1.74l-8.3 5.4c-.67.41-1.54-.07-1.54-.87z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<script>
+(function () {
+  'use strict';
+
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+
+  // 设计稿只演示选中态；真实页面切换由原生侧接管
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (item) {
+        var active = item === tab;
+        item.classList.toggle('is-active', active);
+        if (active) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

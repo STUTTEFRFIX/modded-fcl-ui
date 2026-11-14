@@ -1,0 +1,1405 @@
+diff --git a/FCL/src/main/AndroidManifest.xml b/FCL/src/main/AndroidManifest.xml
+index da0588ef..90948bed 100644
+--- a/FCL/src/main/AndroidManifest.xml
++++ b/FCL/src/main/AndroidManifest.xml
+@@ -96,6 +96,13 @@
+             </intent-filter>
+         </activity-alias>
+ 
++        <activity
++            android:name=".activity.OnboardingActivity"
++            android:exported="false"
++            android:screenOrientation="portrait"
++            android:theme="@style/Theme.FoldCraftLauncher"
++            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation|uiMode" />
++
+         <activity
+             android:name=".activity.MainActivity"
+             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation|uiMode"
+diff --git a/FCL/src/main/java/com/tungsten/fcl/activity/OnboardingActivity.kt b/FCL/src/main/java/com/tungsten/fcl/activity/OnboardingActivity.kt
+new file mode 100644
+index 00000000..3998ea02
+--- /dev/null
++++ b/FCL/src/main/java/com/tungsten/fcl/activity/OnboardingActivity.kt
+@@ -0,0 +1,136 @@
++package com.tungsten.fcl.activity
++
++import android.content.Context
++import android.content.Intent
++import android.os.Bundle
++import android.view.View
++import android.view.ViewGroup
++import android.widget.Button
++import android.widget.FrameLayout
++import android.widget.ImageButton
++import android.widget.LinearLayout
++import android.widget.ViewFlipper
++import androidx.core.content.edit
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.core.view.updatePadding
++import com.tungsten.fcl.R
++import com.tungsten.fcllibrary.component.FCLActivity
++
++/**
++ * 首次启动引导：三屏竖屏纸质页，看完进主界面。
++ *
++ * 文案是产品原文，逐字不改（见 docs/20/首次启动引导/README.md §2.1）。
++ * 样式全部用 onb_* 资源，不接 [com.tungsten.fcllibrary.component.theme.ThemeEngine] 的自动取色，
++ * 避免新界面被旧主题的自动着色带走（docs/19 §4.6）。
++ */
++class OnboardingActivity : FCLActivity() {
++
++    companion object {
++        /** Splash 把本该给 MainActivity 的 extras 暂存在这里，引导结束后原样转发 */
++        const val EXTRA_NEXT_EXTRAS = "onboarding_next_extras"
++
++        private const val PREFS = "launcher"
++        private const val KEY_DONE = "onboarding_done"
++
++        private const val PAGE_COUNT = 3
++
++        /** 是否还需要展示引导（只跑一次） */
++        @JvmStatic
++        fun shouldShow(context: Context): Boolean =
++            !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
++                .getBoolean(KEY_DONE, false)
++    }
++
++    private lateinit var pager: ViewFlipper
++    private lateinit var nextButton: Button
++    private lateinit var backButton: Button
++    private lateinit var dots: List<View>
++
++    private var index = 0
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        setContentView(R.layout.activity_onboarding)
++
++        // 浅纸面配深色状态栏图标
++        WindowCompat.getInsetsController(window, window.decorView).apply {
++            isAppearanceLightStatusBars = true
++            isAppearanceLightNavigationBars = true
++        }
++        // 全屏与否由 FCLActivity 决定，这里只保证内容不被刘海/手势条压住
++        val root = findViewById<FrameLayout>(R.id.onb_root)
++        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
++            val bars = insets.getInsets(
++                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
++            )
++            view.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
++            insets
++        }
++
++        pager = findViewById(R.id.onb_pager)
++        pager.setInAnimation(this, R.anim.onboarding_in)
++        pager.setOutAnimation(this, R.anim.onboarding_out)
++
++        nextButton = findViewById(R.id.onb_next)
++        backButton = findViewById(R.id.onb_back)
++
++        val dotContainer = findViewById<LinearLayout>(R.id.onb_dots)
++        dots = (0 until dotContainer.childCount).map { dotContainer.getChildAt(it) }
++
++        nextButton.setOnClickListener {
++            if (index < PAGE_COUNT - 1) go(index + 1) else finishOnboarding()
++        }
++        backButton.setOnClickListener {
++            if (index > 0) go(index - 1)
++        }
++        findViewById<ImageButton>(R.id.onb_close).setOnClickListener { finishOnboarding() }
++
++        applyPage()
++    }
++
++    private fun go(target: Int) {
++        if (target == index) return
++        if (target > index) pager.showNext() else pager.showPrevious()
++        index = target
++        applyPage()
++    }
++
++    private fun applyPage() {
++        nextButton.setText(
++            if (index == PAGE_COUNT - 1) R.string.onboarding_start else R.string.onboarding_next
++        )
++        backButton.visibility = if (index == 0) View.GONE else View.VISIBLE
++
++        val dotSize = resources.getDimensionPixelSize(R.dimen.onb_dot)
++        val dotOnSize = resources.getDimensionPixelSize(R.dimen.onb_dot_on_w)
++        dots.forEachIndexed { i, dot ->
++            val on = i == index
++            val lp = dot.layoutParams as ViewGroup.MarginLayoutParams
++            lp.width = if (on) dotOnSize else dotSize
++            dot.layoutParams = lp
++            dot.setBackgroundResource(
++                if (on) R.drawable.onboarding_dot_on else R.drawable.onboarding_dot_off
++            )
++        }
++    }
++
++    /** 引导结束：记一次标记，按原计划进主界面 */
++    private fun finishOnboarding() {
++        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean(KEY_DONE, true) }
++
++        val forwarded = intent.getBundleExtra(EXTRA_NEXT_EXTRAS)
++        val target = Intent(this, MainActivity::class.java)
++        if (forwarded != null) target.putExtras(forwarded)
++
++        startActivity(target)
++        overridePendingTransition(0, 0)
++        finish()
++    }
++
++    @Deprecated("引导页只有三级，返回键等同于返回上一屏")
++    override fun onBackPressed() {
++        if (index > 0) go(index - 1) else finishOnboarding()
++    }
++}
+diff --git a/FCL/src/main/java/com/tungsten/fcl/activity/SplashActivity.kt b/FCL/src/main/java/com/tungsten/fcl/activity/SplashActivity.kt
+index efe0eea7..aafa41ec 100644
+--- a/FCL/src/main/java/com/tungsten/fcl/activity/SplashActivity.kt
++++ b/FCL/src/main/java/com/tungsten/fcl/activity/SplashActivity.kt
+@@ -165,10 +165,20 @@ class SplashActivity : FCLActivity() {
+                     }
+                 }
+             }
+-            startActivity(
+-                handleModpack(Intent(this@SplashActivity, MainActivity::class.java)),
+-                ActivityOptionsCompat.makeCustomAnimation(this@SplashActivity, 0, 0).toBundle()
+-            )
++            // 首次启动先走三屏引导；引导结束由 OnboardingActivity 拉起 MainActivity
++            val target = handleModpack(Intent(this@SplashActivity, MainActivity::class.java))
++            if (OnboardingActivity.shouldShow(this@SplashActivity)) {
++                startActivity(
++                    Intent(this@SplashActivity, OnboardingActivity::class.java).apply {
++                        target.extras?.let { putExtra(OnboardingActivity.EXTRA_NEXT_EXTRAS, it) }
++                    }
++                )
++            } else {
++                startActivity(
++                    target,
++                    ActivityOptionsCompat.makeCustomAnimation(this@SplashActivity, 0, 0).toBundle()
++                )
++            }
+             finish()
+         }
+     }
+diff --git a/FCL/src/main/res/anim/onboarding_in.xml b/FCL/src/main/res/anim/onboarding_in.xml
+new file mode 100644
+index 00000000..4b2a737c
+--- /dev/null
++++ b/FCL/src/main/res/anim/onboarding_in.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<set xmlns:android="http://schemas.android.com/apk/res/android"
++    android:interpolator="@android:anim/decelerate_interpolator">
++    <alpha android:fromAlpha="0" android:toAlpha="1" android:duration="240" />
++    <translate android:fromYDelta="4%p" android:toYDelta="0" android:duration="480" />
++</set>
+diff --git a/FCL/src/main/res/anim/onboarding_out.xml b/FCL/src/main/res/anim/onboarding_out.xml
+new file mode 100644
+index 00000000..fcfdc4fa
+--- /dev/null
++++ b/FCL/src/main/res/anim/onboarding_out.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<alpha xmlns:android="http://schemas.android.com/apk/res/android"
++    android:fromAlpha="1"
++    android:toAlpha="0"
++    android:duration="200" />
+diff --git a/FCL/src/main/res/drawable-nodpi/onb_texture.png b/FCL/src/main/res/drawable-nodpi/onb_texture.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..586c030f7cae7dcbdbc060b8741c451ed8a6beb9
+GIT binary patch
+literal 27642
+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
+
+literal 0
+KcmV+b0RR6000031
+
+diff --git a/FCL/src/main/res/drawable/bg_onboarding_ghost.xml b/FCL/src/main/res/drawable/bg_onboarding_ghost.xml
+new file mode 100644
+index 00000000..66d7b1e2
+--- /dev/null
++++ b/FCL/src/main/res/drawable/bg_onboarding_ghost.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/onb_ripple">
++    <item android:id="@android:id/mask">
++        <shape android:shape="rectangle">
++            <corners android:radius="26dp" />
++            <solid android:color="#FF000000" />
++        </shape>
++    </item>
++</ripple>
+diff --git a/FCL/src/main/res/drawable/bg_onboarding_paper.xml b/FCL/src/main/res/drawable/bg_onboarding_paper.xml
+new file mode 100644
+index 00000000..84675cac
+--- /dev/null
++++ b/FCL/src/main/res/drawable/bg_onboarding_paper.xml
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <gradient
++        android:angle="270"
++        android:startColor="@color/onb_paper_0"
++        android:centerColor="@color/onb_paper_1"
++        android:endColor="@color/onb_paper_2" />
++</shape>
+diff --git a/FCL/src/main/res/drawable/bg_onboarding_primary.xml b/FCL/src/main/res/drawable/bg_onboarding_primary.xml
+new file mode 100644
+index 00000000..169d85f6
+--- /dev/null
++++ b/FCL/src/main/res/drawable/bg_onboarding_primary.xml
+@@ -0,0 +1,15 @@
++<?xml version="1.0" encoding="utf-8"?>
++<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/onb_ripple">
++    <item android:id="@android:id/mask">
++        <shape android:shape="rectangle">
++            <corners android:radius="26dp" />
++            <solid android:color="#FF000000" />
++        </shape>
++    </item>
++    <item>
++        <shape android:shape="rectangle">
++            <corners android:radius="26dp" />
++            <solid android:color="@color/onb_accent_ink" />
++        </shape>
++    </item>
++</ripple>
+diff --git a/FCL/src/main/res/drawable/bg_onboarding_texture.xml b/FCL/src/main/res/drawable/bg_onboarding_texture.xml
+new file mode 100644
+index 00000000..13446a80
+--- /dev/null
++++ b/FCL/src/main/res/drawable/bg_onboarding_texture.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
++    android:src="@drawable/onb_texture"
++    android:tileMode="repeat"
++    android:gravity="top|left" />
+diff --git a/FCL/src/main/res/drawable/bg_roster_avatar.xml b/FCL/src/main/res/drawable/bg_roster_avatar.xml
+new file mode 100644
+index 00000000..b9fa2873
+--- /dev/null
++++ b/FCL/src/main/res/drawable/bg_roster_avatar.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <corners android:radius="12dp" />
++    <solid android:color="@color/onb_skeleton_fill" />
++    <stroke
++        android:width="1dp"
++        android:color="@color/onb_line_strong"
++        android:dashWidth="4dp"
++        android:dashGap="3dp" />
++</shape>
+diff --git a/FCL/src/main/res/drawable/bg_roster_line.xml b/FCL/src/main/res/drawable/bg_roster_line.xml
+new file mode 100644
+index 00000000..f521db79
+--- /dev/null
++++ b/FCL/src/main/res/drawable/bg_roster_line.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <corners android:radius="6dp" />
++    <solid android:color="@color/onb_skeleton_line" />
++</shape>
+diff --git a/FCL/src/main/res/drawable/ic_onboarding_close.xml b/FCL/src/main/res/drawable/ic_onboarding_close.xml
+new file mode 100644
+index 00000000..03e7f204
+--- /dev/null
++++ b/FCL/src/main/res/drawable/ic_onboarding_close.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="18dp"
++    android:height="18dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:pathData="M5,5 L19,19"
++        android:strokeColor="@color/onb_ink_3"
++        android:strokeWidth="1.9"
++        android:strokeLineCap="round" />
++    <path
++        android:pathData="M19,5 L5,19"
++        android:strokeColor="@color/onb_ink_3"
++        android:strokeWidth="1.9"
++        android:strokeLineCap="round" />
++</vector>
+diff --git a/FCL/src/main/res/drawable/onboarding_art_community.xml b/FCL/src/main/res/drawable/onboarding_art_community.xml
+new file mode 100644
+index 00000000..5b5f4da5
+--- /dev/null
++++ b/FCL/src/main/res/drawable/onboarding_art_community.xml
+@@ -0,0 +1,29 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- 由 docs/20 原型 SVG 自动转换（viewBox 22 54 180 100） -->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="238dp"
++    android:height="132dp"
++    android:viewportWidth="180.0"
++    android:viewportHeight="100.0">
++  <group android:translateX="-22.0" android:translateY="-54.0">
++    <path android:pathData="M32.0,141.0 a78.0,6.0 0 1 0 156.0,0 a78.0,6.0 0 1 0 -156.0,0 z" android:fillColor="@color/onb_art_soil" android:fillAlpha=".14"/>
++    <path android:pathData="M28 141 h168" android:fillColor="#00000000" android:strokeColor="@color/onb_ink" android:strokeWidth="2" android:strokeAlpha=".12" android:strokeLineCap="round"/>
++    <path android:pathData="M42 96 Q110 48 178 96" android:fillColor="#00000000" android:strokeColor="@color/onb_accent_ink" android:strokeWidth="2.2" android:strokeAlpha=".34" android:strokeLineCap="round"/>
++    <path android:pathData="M35.0,101.0 a9.0,9.0 0 1 0 18.0,0 a9.0,9.0 0 1 0 -18.0,0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".26"/>
++    <path android:pathData="M44.0,106.0 h0.0 a13.0,13.0 0 0 1 13.0,13.0 v9.0 a13.0,13.0 0 0 1 -13.0,13.0 h-0.0 a13.0,13.0 0 0 1 -13.0,-13.0 v-9.0 a13.0,13.0 0 0 1 13.0,-13.0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".26"/>
++    <path android:pathData="M69.0,91.0 a9.0,9.0 0 1 0 18.0,0 a9.0,9.0 0 1 0 -18.0,0 z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M78.0,96.0 h0.0 a13.0,13.0 0 0 1 13.0,13.0 v19.0 a13.0,13.0 0 0 1 -13.0,13.0 h-0.0 a13.0,13.0 0 0 1 -13.0,-13.0 v-19.0 a13.0,13.0 0 0 1 13.0,-13.0 z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M100.5,83.0 a9.5,9.5 0 1 0 19.0,0 a9.5,9.5 0 1 0 -19.0,0 z" android:fillColor="@color/onb_accent_ink"/>
++    <path android:pathData="M110.0,88.0 h0.0 a13.0,13.0 0 0 1 13.0,13.0 v27.0 a13.0,13.0 0 0 1 -13.0,13.0 h-0.0 a13.0,13.0 0 0 1 -13.0,-13.0 v-27.0 a13.0,13.0 0 0 1 13.0,-13.0 z" android:fillColor="@color/onb_accent_ink"/>
++    <path android:pathData="M133.0,91.0 a9.0,9.0 0 1 0 18.0,0 a9.0,9.0 0 1 0 -18.0,0 z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M142.0,96.0 h0.0 a13.0,13.0 0 0 1 13.0,13.0 v19.0 a13.0,13.0 0 0 1 -13.0,13.0 h-0.0 a13.0,13.0 0 0 1 -13.0,-13.0 v-19.0 a13.0,13.0 0 0 1 13.0,-13.0 z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M167.0,101.0 a9.0,9.0 0 1 0 18.0,0 a9.0,9.0 0 1 0 -18.0,0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".26"/>
++    <path android:pathData="M176.0,106.0 h0.0 a13.0,13.0 0 0 1 13.0,13.0 v9.0 a13.0,13.0 0 0 1 -13.0,13.0 h-0.0 a13.0,13.0 0 0 1 -13.0,-13.0 v-9.0 a13.0,13.0 0 0 1 13.0,-13.0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".26"/>
++    <path android:pathData="M57.0,122.0 a4.0,4.0 0 1 0 8.0,0 a4.0,4.0 0 1 0 -8.0,0 z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M89.8,120.0 a4.2,4.2 0 1 0 8.4,0 a4.2,4.2 0 1 0 -8.4,0 z" android:fillColor="#6E8560"/>
++    <path android:pathData="M121.8,120.0 a4.2,4.2 0 1 0 8.4,0 a4.2,4.2 0 1 0 -8.4,0 z" android:fillColor="#6E8560"/>
++    <path android:pathData="M155.0,122.0 a4.0,4.0 0 1 0 8.0,0 a4.0,4.0 0 1 0 -8.0,0 z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M27.6,72.0 a2.4,2.4 0 1 0 4.8,0 a2.4,2.4 0 1 0 -4.8,0 z" android:fillColor="@color/onb_art_amber" android:fillAlpha=".7"/>
++    <path android:pathData="M189.8,76.0 a2.2,2.2 0 1 0 4.4,0 a2.2,2.2 0 1 0 -4.4,0 z" android:fillColor="@color/onb_art_rust" android:fillAlpha=".6"/>
++  </group>
++</vector>
+diff --git a/FCL/src/main/res/drawable/onboarding_art_credits.xml b/FCL/src/main/res/drawable/onboarding_art_credits.xml
+new file mode 100644
+index 00000000..ede73193
+--- /dev/null
++++ b/FCL/src/main/res/drawable/onboarding_art_credits.xml
+@@ -0,0 +1,33 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- 由 docs/20 原型 SVG 自动转换（viewBox 18 18 176 118） -->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="204dp"
++    android:height="137dp"
++    android:viewportWidth="176.0"
++    android:viewportHeight="118.0">
++  <group android:translateX="-18.0" android:translateY="-18.0">
++    <path android:pathData="M44.0,126.0 a56.0,6.0 0 1 0 112.0,0 a56.0,6.0 0 1 0 -112.0,0 z" android:fillColor="@color/onb_art_soil" android:fillAlpha=".16"/>
++    <group android:rotation="-8.0" android:pivotX="100.0" android:pivotY="62.0">
++      <path android:pathData="M53.0,22.0 h94.0 a9.0,9.0 0 0 1 9.0,9.0 v8.0 a9.0,9.0 0 0 1 -9.0,9.0 h-94.0 a9.0,9.0 0 0 1 -9.0,-9.0 v-8.0 a9.0,9.0 0 0 1 9.0,-9.0 z" android:fillColor="@color/onb_kraft" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".14"/>
++      <path android:pathData="M55.4,35.0 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 z" android:fillColor="@color/onb_paper_light" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".20"/>
++      <path android:pathData="M72.5,32.0 h25.0 a2.5,2.5 0 0 1 2.5,2.5 v0.0 a2.5,2.5 0 0 1 -2.5,2.5 h-25.0 a2.5,2.5 0 0 1 -2.5,-2.5 v-0.0 a2.5,2.5 0 0 1 2.5,-2.5 z" android:fillColor="@color/onb_ink" android:fillAlpha=".16"/>
++    </group>
++    <group android:rotation="-3.0" android:pivotX="100.0" android:pivotY="62.0">
++      <path android:pathData="M53.0,50.0 h94.0 a9.0,9.0 0 0 1 9.0,9.0 v8.0 a9.0,9.0 0 0 1 -9.0,9.0 h-94.0 a9.0,9.0 0 0 1 -9.0,-9.0 v-8.0 a9.0,9.0 0 0 1 9.0,-9.0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".18"/>
++      <path android:pathData="M55.4,63.0 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 z" android:fillColor="@color/onb_paper_light" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".20"/>
++      <path android:pathData="M72.5,60.0 h35.0 a2.5,2.5 0 0 1 2.5,2.5 v0.0 a2.5,2.5 0 0 1 -2.5,2.5 h-35.0 a2.5,2.5 0 0 1 -2.5,-2.5 v-0.0 a2.5,2.5 0 0 1 2.5,-2.5 z" android:fillColor="@color/onb_ink" android:fillAlpha=".20"/>
++    </group>
++    <path android:pathData="M52.0,78.0 h92.0 a10.0,10.0 0 0 1 10.0,10.0 v12.0 a10.0,10.0 0 0 1 -10.0,10.0 h-92.0 a10.0,10.0 0 0 1 -10.0,-10.0 v-12.0 a10.0,10.0 0 0 1 10.0,-10.0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".24"/>
++    <path android:pathData="M53.0,94.0 a3.0,3.0 0 1 0 6.0,0 a3.0,3.0 0 1 0 -6.0,0 z" android:fillColor="@color/onb_paper_light" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".24"/>
++    <path android:pathData="M71.0,88.0 h42.0 a3.0,3.0 0 0 1 3.0,3.0 v0.0 a3.0,3.0 0 0 1 -3.0,3.0 h-42.0 a3.0,3.0 0 0 1 -3.0,-3.0 v-0.0 a3.0,3.0 0 0 1 3.0,-3.0 z" android:fillColor="@color/onb_ink" android:fillAlpha=".52"/>
++    <path android:pathData="M70.5,99.0 h27.0 a2.5,2.5 0 0 1 2.5,2.5 v0.0 a2.5,2.5 0 0 1 -2.5,2.5 h-27.0 a2.5,2.5 0 0 1 -2.5,-2.5 v-0.0 a2.5,2.5 0 0 1 2.5,-2.5 z" android:fillColor="@color/onb_ink" android:fillAlpha=".18"/>
++    <path android:pathData="M128.5,94.0 a9.5,9.5 0 1 0 19.0,0 a9.5,9.5 0 1 0 -19.0,0 z" android:fillColor="@color/onb_accent_ink"/>
++    <path android:pathData="M133.5 94 l3.2 3.4 6.6-6.8" android:fillColor="#00000000" android:strokeColor="@color/onb_on_accent" android:strokeWidth="2.4" android:strokeLineCap="round" android:strokeLineJoin="round"/>
++    <group android:rotation="10.0" android:pivotX="172.0" android:pivotY="34.0" android:alpha=".95">
++      <path android:pathData="M164.0,22.0 h18.0 a6.0,6.0 0 0 1 6.0,6.0 v6.0 a6.0,6.0 0 0 1 -6.0,6.0 h-18.0 a6.0,6.0 0 0 1 -6.0,-6.0 v-6.0 a6.0,6.0 0 0 1 6.0,-6.0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".16"/>
++      <path android:pathData="M165.8,28.0 h12.4 a1.8,1.8 0 0 1 1.8,1.8 v0.0 a1.8,1.8 0 0 1 -1.8,1.8 h-12.4 a1.8,1.8 0 0 1 -1.8,-1.8 v-0.0 a1.8,1.8 0 0 1 1.8,-1.8 z" android:fillColor="@color/onb_ink" android:fillAlpha=".22"/>
++    </group>
++    <path android:pathData="M23.6,70.0 a2.4,2.4 0 1 0 4.8,0 a2.4,2.4 0 1 0 -4.8,0 z" android:fillColor="@color/onb_art_sage" android:fillAlpha=".85"/>
++    <path android:pathData="M179.8,86.0 a2.2,2.2 0 1 0 4.4,0 a2.2,2.2 0 1 0 -4.4,0 z" android:fillColor="@color/onb_art_amber" android:fillAlpha=".7"/>
++  </group>
++</vector>
+diff --git a/FCL/src/main/res/drawable/onboarding_art_welcome.xml b/FCL/src/main/res/drawable/onboarding_art_welcome.xml
+new file mode 100644
+index 00000000..9ccbac55
+--- /dev/null
++++ b/FCL/src/main/res/drawable/onboarding_art_welcome.xml
+@@ -0,0 +1,32 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- 由 docs/20 原型 SVG 自动转换（viewBox 30 12 168 152） -->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="204dp"
++    android:height="184dp"
++    android:viewportWidth="168.0"
++    android:viewportHeight="152.0">
++  <group android:translateX="-30.0" android:translateY="-12.0">
++    <path android:pathData="M54.0,150.0 a58.0,7.0 0 1 0 116.0,0 a58.0,7.0 0 1 0 -116.0,0 z" android:fillColor="@color/onb_art_soil" android:fillAlpha=".16"/>
++    <group android:rotation="6.0" android:pivotX="110.0" android:pivotY="78.0">
++      <path android:pathData="M60.0,20.0 h100.0 a10.0,10.0 0 0 1 10.0,10.0 v82.0 a10.0,10.0 0 0 1 -10.0,10.0 h-100.0 a10.0,10.0 0 0 1 -10.0,-10.0 v-82.0 a10.0,10.0 0 0 1 10.0,-10.0 z" android:fillColor="@color/onb_kraft" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".14"/>
++    </group>
++    <group android:rotation="-3.0" android:pivotX="110.0" android:pivotY="84.0">
++      <path android:pathData="M54.0,28.0 h102.0 a10.0,10.0 0 0 1 10.0,10.0 v86.0 a10.0,10.0 0 0 1 -10.0,10.0 h-102.0 a10.0,10.0 0 0 1 -10.0,-10.0 v-86.0 a10.0,10.0 0 0 1 10.0,-10.0 z" android:fillColor="@color/onb_card" android:strokeColor="@color/onb_ink" android:strokeWidth="1" android:strokeAlpha=".24"/>
++      <path android:pathData="M166 120 l0 -17 l-17 17 z" android:fillColor="@color/onb_kraft_deep" android:fillAlpha=".85"/>
++      <path android:pathData="M149 120 l17 0 l0 -17 z" android:fillColor="@color/onb_card" android:fillAlpha=".9"/>
++      <path android:pathData="M63.0,48.0 h58.0 a3.0,3.0 0 0 1 3.0,3.0 v0.0 a3.0,3.0 0 0 1 -3.0,3.0 h-58.0 a3.0,3.0 0 0 1 -3.0,-3.0 v-0.0 a3.0,3.0 0 0 1 3.0,-3.0 z" android:fillColor="@color/onb_ink" android:fillAlpha=".66"/>
++      <path android:pathData="M62.5,63.0 h75.0 a2.5,2.5 0 0 1 2.5,2.5 v0.0 a2.5,2.5 0 0 1 -2.5,2.5 h-75.0 a2.5,2.5 0 0 1 -2.5,-2.5 v-0.0 a2.5,2.5 0 0 1 2.5,-2.5 z" android:fillColor="@color/onb_ink" android:fillAlpha=".22"/>
++      <path android:pathData="M62.5,75.0 h51.0 a2.5,2.5 0 0 1 2.5,2.5 v0.0 a2.5,2.5 0 0 1 -2.5,2.5 h-51.0 a2.5,2.5 0 0 1 -2.5,-2.5 v-0.0 a2.5,2.5 0 0 1 2.5,-2.5 z" android:fillColor="@color/onb_ink" android:fillAlpha=".22"/>
++      <path android:pathData="M62.5,87.0 h63.0 a2.5,2.5 0 0 1 2.5,2.5 v0.0 a2.5,2.5 0 0 1 -2.5,2.5 h-63.0 a2.5,2.5 0 0 1 -2.5,-2.5 v-0.0 a2.5,2.5 0 0 1 2.5,-2.5 z" android:fillColor="@color/onb_ink" android:fillAlpha=".22"/>
++      <path android:pathData="M129.0,94.0 h14.0 a9.0,9.0 0 0 1 9.0,9.0 v14.0 a9.0,9.0 0 0 1 -9.0,9.0 h-14.0 a9.0,9.0 0 0 1 -9.0,-9.0 v-14.0 a9.0,9.0 0 0 1 9.0,-9.0 z" android:fillColor="@color/onb_accent_ink"/>
++      <path android:pathData="M128 110 l5 5.2 10.5-11" android:fillColor="#00000000" android:strokeColor="@color/onb_on_accent" android:strokeWidth="3.2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
++    </group>
++    <path android:pathData="M52 134 q-3 -13 5 -21" android:fillColor="#00000000" android:strokeColor="@color/onb_art_deep" android:strokeWidth="2.4" android:strokeLineCap="round"/>
++    <path android:pathData="M58 113 c9 -6 17 -3 18 5 c-9 3 -15 1 -18 -5z" android:fillColor="@color/onb_art_sage"/>
++    <path android:pathData="M56 121 c-8 -6 -16 -3 -17 5 c9 3 15 0 17 -5z" android:fillColor="@color/onb_art_olive"/>
++    <path android:pathData="M185.2,50.0 a2.8,2.8 0 1 0 5.6,0 a2.8,2.8 0 1 0 -5.6,0 z" android:fillColor="@color/onb_art_amber" android:fillAlpha=".75"/>
++    <path android:pathData="M33.6,92.0 a2.4,2.4 0 1 0 4.8,0 a2.4,2.4 0 1 0 -4.8,0 z" android:fillColor="@color/onb_art_rust" android:fillAlpha=".6"/>
++    <path android:pathData="M194.0,116.0 a2.0,2.0 0 1 0 4.0,0 a2.0,2.0 0 1 0 -4.0,0 z" android:fillColor="@color/onb_art_sage" android:fillAlpha=".85"/>
++    <path android:pathData="M88.1,17.0 a1.9,1.9 0 1 0 3.8,0 a1.9,1.9 0 1 0 -3.8,0 z" android:fillColor="@color/onb_art_amber" android:fillAlpha=".55"/>
++  </group>
++</vector>
+diff --git a/FCL/src/main/res/drawable/onboarding_dot_off.xml b/FCL/src/main/res/drawable/onboarding_dot_off.xml
+new file mode 100644
+index 00000000..3efdeacc
+--- /dev/null
++++ b/FCL/src/main/res/drawable/onboarding_dot_off.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <corners android:radius="4dp" />
++    <solid android:color="@color/onb_line_strong" />
++</shape>
+diff --git a/FCL/src/main/res/drawable/onboarding_dot_on.xml b/FCL/src/main/res/drawable/onboarding_dot_on.xml
+new file mode 100644
+index 00000000..1263e848
+--- /dev/null
++++ b/FCL/src/main/res/drawable/onboarding_dot_on.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <corners android:radius="4dp" />
++    <solid android:color="@color/onb_accent_ink" />
++</shape>
+diff --git a/FCL/src/main/res/layout/activity_onboarding.xml b/FCL/src/main/res/layout/activity_onboarding.xml
+new file mode 100644
+index 00000000..f0f40917
+--- /dev/null
++++ b/FCL/src/main/res/layout/activity_onboarding.xml
+@@ -0,0 +1,122 @@
++<?xml version="1.0" encoding="utf-8"?>
++<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/onb_root"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/bg_onboarding_paper">
++
++    <!-- 纸纹：平铺的极淡颗粒，叠在纸色上 -->
++    <View
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:background="@drawable/bg_onboarding_texture"
++        android:alpha="0.55"
++        android:importantForAccessibility="no" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:orientation="vertical"
++        android:paddingStart="@dimen/onb_inset"
++        android:paddingEnd="@dimen/onb_inset"
++        android:paddingTop="8dp"
++        android:paddingBottom="24dp">
++
++        <!-- 顶栏：纯图形关闭 -->
++        <FrameLayout
++            android:layout_width="match_parent"
++            android:layout_height="@dimen/onb_touch">
++
++            <ImageButton
++                android:id="@+id/onb_close"
++                android:layout_width="@dimen/onb_touch"
++                android:layout_height="@dimen/onb_touch"
++                android:layout_gravity="end|center_vertical"
++                android:background="?attr/selectableItemBackgroundBorderless"
++                android:contentDescription="@string/onboarding_skip"
++                android:scaleType="center"
++                android:src="@drawable/ic_onboarding_close" />
++        </FrameLayout>
++
++        <ViewFlipper
++            android:id="@+id/onb_pager"
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_weight="1">
++
++            <include layout="@layout/onboarding_page_welcome" />
++            <include layout="@layout/onboarding_page_community" />
++            <include layout="@layout/onboarding_page_credits" />
++        </ViewFlipper>
++
++        <LinearLayout
++            android:id="@+id/onb_dots"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="horizontal"
++            android:gravity="center"
++            android:layout_marginTop="8dp"
++            android:layout_marginBottom="16dp"
++            android:importantForAccessibility="no">
++
++        <View
++            android:layout_width="@dimen/onb_dot"
++            android:layout_height="@dimen/onb_dot"
++            android:layout_marginStart="0dp"
++            android:layout_marginEnd="6dp"
++            android:background="@drawable/onboarding_dot_on" />
++        <View
++            android:layout_width="@dimen/onb_dot"
++            android:layout_height="@dimen/onb_dot"
++            android:layout_marginStart="6dp"
++            android:layout_marginEnd="6dp"
++            android:background="@drawable/onboarding_dot_off" />
++        <View
++            android:layout_width="@dimen/onb_dot"
++            android:layout_height="@dimen/onb_dot"
++            android:layout_marginStart="6dp"
++            android:layout_marginEnd="6dp"
++            android:background="@drawable/onboarding_dot_off" />
++        </LinearLayout>
++
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="horizontal"
++            android:gravity="center_vertical">
++
++            <Button
++                android:id="@+id/onb_back"
++                android:layout_width="wrap_content"
++                android:layout_height="@dimen/onb_action_height"
++                android:minWidth="88dp"
++                android:minHeight="0dp"
++                android:layout_marginEnd="12dp"
++                android:background="@drawable/bg_onboarding_ghost"
++                android:stateListAnimator="@null"
++                android:text="@string/onboarding_back"
++                android:textAllCaps="false"
++                android:textColor="@color/onb_ink_2"
++                android:textSize="14sp"
++                android:fontFamily="sans-serif-medium"
++                android:letterSpacing="0"
++                android:visibility="gone" />
++
++            <Button
++                android:id="@+id/onb_next"
++                android:layout_width="0dp"
++                android:layout_height="@dimen/onb_action_height"
++                android:layout_weight="1"
++                android:minWidth="0dp"
++                android:minHeight="0dp"
++                android:background="@drawable/bg_onboarding_primary"
++                android:stateListAnimator="@null"
++                android:text="@string/onboarding_next"
++                android:textAllCaps="false"
++                android:textColor="@color/onb_on_accent"
++                android:textSize="16sp"
++                android:fontFamily="sans-serif-medium"
++                android:letterSpacing="0" />
++        </LinearLayout>
++    </LinearLayout>
++</FrameLayout>
+diff --git a/FCL/src/main/res/layout/onboarding_page_community.xml b/FCL/src/main/res/layout/onboarding_page_community.xml
+new file mode 100644
+index 00000000..729adfa9
+--- /dev/null
++++ b/FCL/src/main/res/layout/onboarding_page_community.xml
+@@ -0,0 +1,31 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:gravity="center"
++    android:paddingStart="@dimen/onb_inset"
++    android:paddingEnd="@dimen/onb_inset">
++
++    <ImageView
++        android:layout_width="@dimen/onb_art_community_w"
++        android:layout_height="wrap_content"
++        android:adjustViewBounds="true"
++        android:src="@drawable/onboarding_art_community"
++        android:importantForAccessibility="no" />
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center_horizontal"
++        android:layout_marginTop="32dp"
++        android:maxWidth="@dimen/onb_title_max_w"
++        android:gravity="center"
++        android:text="@string/onboarding_title_community"
++        android:textColor="@color/onb_ink"
++        android:textSize="32sp"
++        android:fontFamily="sans-serif-medium"
++        android:lineSpacingExtra="8sp"
++        android:includeFontPadding="false"
++        android:breakStrategy="balanced" />
++</LinearLayout>
+diff --git a/FCL/src/main/res/layout/onboarding_page_credits.xml b/FCL/src/main/res/layout/onboarding_page_credits.xml
+new file mode 100644
+index 00000000..4da9b241
+--- /dev/null
++++ b/FCL/src/main/res/layout/onboarding_page_credits.xml
+@@ -0,0 +1,120 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:gravity="center"
++    android:paddingStart="@dimen/onb_inset"
++    android:paddingEnd="@dimen/onb_inset">
++
++    <ImageView
++        android:layout_width="@dimen/onb_art_credits_w"
++        android:layout_height="wrap_content"
++        android:adjustViewBounds="true"
++        android:src="@drawable/onboarding_art_credits"
++        android:importantForAccessibility="no" />
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center_horizontal"
++        android:layout_marginTop="24dp"
++        android:gravity="center"
++        android:text="@string/onboarding_title_credits"
++        android:textColor="@color/onb_ink"
++        android:textSize="32sp"
++        android:fontFamily="sans-serif-medium"
++        android:lineSpacingExtra="8sp"
++        android:includeFontPadding="false" />
++
++    <!-- 名单待填：这里是无文字的占位骨架（docs/20/README.md §2.3） -->
++    <LinearLayout
++        android:layout_width="@dimen/onb_roster_w"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center_horizontal"
++        android:layout_marginTop="32dp"
++        android:orientation="vertical"
++        android:importantForAccessibility="noHideDescendants">
++
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="horizontal"
++            android:gravity="center_vertical"
++            android:layout_marginTop="0dp">
++
++            <View
++                android:layout_width="@dimen/onb_avatar"
++                android:layout_height="@dimen/onb_avatar"
++                android:background="@drawable/bg_roster_avatar" />
++
++            <View
++                android:layout_width="0dp"
++                android:layout_height="12dp"
++                android:layout_weight="1"
++                android:layout_marginStart="12dp"
++                android:layout_marginEnd="49dp"
++                android:background="@drawable/bg_roster_line" />
++        </LinearLayout>
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="horizontal"
++            android:gravity="center_vertical"
++            android:layout_marginTop="12dp">
++
++            <View
++                android:layout_width="@dimen/onb_avatar"
++                android:layout_height="@dimen/onb_avatar"
++                android:background="@drawable/bg_roster_avatar" />
++
++            <View
++                android:layout_width="0dp"
++                android:layout_height="12dp"
++                android:layout_weight="1"
++                android:layout_marginStart="12dp"
++                android:layout_marginEnd="9dp"
++                android:background="@drawable/bg_roster_line" />
++        </LinearLayout>
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="horizontal"
++            android:gravity="center_vertical"
++            android:layout_marginTop="12dp">
++
++            <View
++                android:layout_width="@dimen/onb_avatar"
++                android:layout_height="@dimen/onb_avatar"
++                android:background="@drawable/bg_roster_avatar" />
++
++            <View
++                android:layout_width="0dp"
++                android:layout_height="12dp"
++                android:layout_weight="1"
++                android:layout_marginStart="12dp"
++                android:layout_marginEnd="71dp"
++                android:background="@drawable/bg_roster_line" />
++        </LinearLayout>
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="horizontal"
++            android:gravity="center_vertical"
++            android:layout_marginTop="12dp">
++
++            <View
++                android:layout_width="@dimen/onb_avatar"
++                android:layout_height="@dimen/onb_avatar"
++                android:background="@drawable/bg_roster_avatar" />
++
++            <View
++                android:layout_width="0dp"
++                android:layout_height="12dp"
++                android:layout_weight="1"
++                android:layout_marginStart="12dp"
++                android:layout_marginEnd="27dp"
++                android:background="@drawable/bg_roster_line" />
++        </LinearLayout>
++    </LinearLayout>
++</LinearLayout>
+diff --git a/FCL/src/main/res/layout/onboarding_page_welcome.xml b/FCL/src/main/res/layout/onboarding_page_welcome.xml
+new file mode 100644
+index 00000000..4d7b4047
+--- /dev/null
++++ b/FCL/src/main/res/layout/onboarding_page_welcome.xml
+@@ -0,0 +1,31 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:gravity="center"
++    android:paddingStart="@dimen/onb_inset"
++    android:paddingEnd="@dimen/onb_inset">
++
++    <ImageView
++        android:layout_width="@dimen/onb_art_w"
++        android:layout_height="wrap_content"
++        android:adjustViewBounds="true"
++        android:src="@drawable/onboarding_art_welcome"
++        android:importantForAccessibility="no" />
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_gravity="center_horizontal"
++        android:layout_marginTop="32dp"
++        android:maxWidth="@dimen/onb_title_max_w"
++        android:gravity="center"
++        android:text="@string/onboarding_title_welcome"
++        android:textColor="@color/onb_ink"
++        android:textSize="32sp"
++        android:fontFamily="sans-serif-medium"
++        android:lineSpacingExtra="8sp"
++        android:includeFontPadding="false"
++        android:breakStrategy="balanced" />
++</LinearLayout>
+diff --git a/FCL/src/main/res/values/colors_onboarding.xml b/FCL/src/main/res/values/colors_onboarding.xml
+new file mode 100644
+index 00000000..1bdac815
+--- /dev/null
++++ b/FCL/src/main/res/values/colors_onboarding.xml
+@@ -0,0 +1,35 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- 首次启动引导：米黄纸质（数值见 docs/20/README.md §4.1） -->
++<resources>
++    <color name="onb_paper_0">#F8F2E3</color>
++    <color name="onb_paper_1">#F2EAD7</color>
++    <color name="onb_paper_2">#E8DDC4</color>
++    <color name="onb_card">#FCF8EE</color>
++
++    <color name="onb_ink">#2C2E28</color>
++    <color name="onb_ink_2">#55584C</color>
++    <color name="onb_ink_3">#5F6256</color>
++
++    <color name="onb_accent_ink">#4C6143</color>
++    <color name="onb_accent_wash">#E2E7D8</color>
++    <color name="onb_on_accent">#F8F3E7</color>
++
++    <color name="onb_line">#297A6848</color>
++    <color name="onb_line_strong">#427A6848</color>
++    <color name="onb_ripple">#1F4C6143</color>
++
++    <color name="onb_kraft">#EFE0C0</color>
++    <color name="onb_kraft_deep">#E9DCC0</color>
++    <color name="onb_paper_light">#F6EBD2</color>
++
++    <color name="onb_art_sage">#8FA37C</color>
++    <color name="onb_art_olive">#78886B</color>
++    <color name="onb_art_deep">#5E6E56</color>
++    <color name="onb_art_soil">#8A6F55</color>
++    <color name="onb_art_amber">#C99A55</color>
++    <color name="onb_art_rust">#B0765A</color>
++    <color name="onb_art_cloud">#FDF8EA</color>
++
++    <color name="onb_skeleton_fill">#0D7A6848</color>
++    <color name="onb_skeleton_line">#247A6848</color>
++</resources>
+diff --git a/FCL/src/main/res/values/dimens_onboarding.xml b/FCL/src/main/res/values/dimens_onboarding.xml
+new file mode 100644
+index 00000000..d7857cca
+--- /dev/null
++++ b/FCL/src/main/res/values/dimens_onboarding.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <dimen name="onb_inset">16dp</dimen>
++    <dimen name="onb_touch">44dp</dimen>
++    <dimen name="onb_action_height">52dp</dimen>
++    <dimen name="onb_art_w">204dp</dimen>
++    <dimen name="onb_art_community_w">238dp</dimen>
++    <dimen name="onb_art_credits_w">204dp</dimen>
++    <dimen name="onb_title_max_w">280dp</dimen>
++    <dimen name="onb_dot">8dp</dimen>
++    <dimen name="onb_dot_on_w">24dp</dimen>
++    <dimen name="onb_roster_w">268dp</dimen>
++    <dimen name="onb_avatar">34dp</dimen>
++</resources>
+diff --git a/FCL/src/main/res/values/strings_onboarding.xml b/FCL/src/main/res/values/strings_onboarding.xml
+new file mode 100644
+index 00000000..72c0a552
+--- /dev/null
++++ b/FCL/src/main/res/values/strings_onboarding.xml
+@@ -0,0 +1,12 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- 三屏正文为产品文案原文，逐字不得改动（docs/20/README.md §2.1） -->
++<resources>
++    <string name="onboarding_title_welcome">欢迎使用 fclui 魔改</string>
++    <string name="onboarding_title_community">我们是来自社区自发组织的修改</string>
++    <string name="onboarding_title_credits">人员名单</string>
++
++    <string name="onboarding_next">下一步</string>
++    <string name="onboarding_start">开始使用</string>
++    <string name="onboarding_back">上一步</string>
++    <string name="onboarding_skip">跳过引导</string>
++</resources>

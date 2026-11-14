@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>FCLUI 纸质界面 · 主界面</title>
+<style>
+/* ==========================================================================
+   FCLUI 纸质主界面 · V2（米黄）
+   结构：状态栏 / 页头 / 页面栈 / 灵动岛 / 底栏 / 弹层
+   规则：只用 token；唯一强调色苔墨；正文 16、辅助 14 为下限；触控 ≥44
+   ========================================================================== */
+:root{
+  color-scheme: light;
+  --paper-0:#F8F2E3; --paper-1:#F2EAD7; --paper-2:#E8DDC4; --card:#FCF8EE;
+  --ink:#2C2E28; --ink-2:#55584C; --ink-3:#5F6256;
+  --accent:#8FA37C; --accent-ink:#4C6143; --accent-wash:#E7EBD5; --on-accent:#FBF5E4;
+  --line:rgba(122,104,72,.16); --line-strong:rgba(122,104,72,.26);
+  --scrim:rgba(44,46,40,.28);
+  --danger:#8C4F3F; --danger-wash:#F0E2DA;
+  --art-sage:#8FA37C; --art-olive:#78886B; --art-deep:#5E6E56;
+  --art-soil:#8A6F55; --art-amber:#C99A55; --art-rust:#B0765A; --art-cloud:#FDF8EA;
+  --font:system-ui,-apple-system,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  --fs-display:32px; --fs-title:22px; --fs-body:16px; --fs-label:14px;
+  --sp1:4px; --sp2:8px; --sp3:12px; --sp4:16px; --sp6:24px; --sp8:40px;
+  --r-thumb:12px; --r-row:16px; --r-card:20px; --r-bar:28px; --r-pill:999px;
+  --dur-press:120ms; --dur-ui:240ms; --dur-enter:480ms;
+  --ease:cubic-bezier(.23,1,.32,1);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);background:var(--paper-2);display:grid;place-items:center;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+
+/* ---------- 机身 ---------- */
+.stage{
+  position:relative;width:390px;height:844px;overflow:hidden;
+  border-radius:var(--r-bar);
+  background:linear-gradient(178deg,var(--paper-0),var(--paper-1) 52%,var(--paper-2));
+  box-shadow:0 30px 80px rgba(92,76,46,.20),0 0 0 1px var(--line);
+  display:grid;grid-template-rows:44px minmax(0,1fr);isolation:isolate;
+}
+.fiber{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.6;
+  background-image:
+    repeating-linear-gradient(0deg,rgba(146,122,82,.05) 0 1px,transparent 1px 3px),
+    repeating-linear-gradient(90deg,rgba(146,122,82,.022) 0 1px,transparent 1px 5px);}
+.grain{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.20;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.6'/%3E%3C/svg%3E");
+  background-size:180px 180px}
+.vignette{position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(125% 72% at 50% -12%,rgba(255,251,238,.85),transparent 62%),
+             radial-gradient(105% 62% at 50% 112%,rgba(126,104,66,.13),transparent 60%)}
+
+/* ---------- 状态栏（仿制） ---------- */
+.statusbar{position:relative;z-index:3;display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px 0 24px;font-size:var(--fs-label);line-height:20px;font-weight:600;color:var(--ink)}
+.glyphs{display:flex;align-items:center;gap:6px}
+.signal{display:flex;align-items:flex-end;gap:2px;height:11px}
+.signal i{display:block;width:3px;border-radius:1px;background:currentColor;opacity:.88}
+.signal i:nth-child(1){height:4px}.signal i:nth-child(2){height:6px}
+.signal i:nth-child(3){height:8.5px}.signal i:nth-child(4){height:11px}
+.wifi{position:relative;width:16px;height:12px;overflow:hidden}
+.wifi i{position:absolute;left:50%;transform:translateX(-50%);border-radius:50%;
+  border:1.7px solid transparent;border-top-color:currentColor;opacity:.88}
+.wifi i:nth-child(1){width:17px;height:17px;top:0}
+.wifi i:nth-child(2){width:11px;height:11px;top:2.5px}
+.wifi b{position:absolute;left:50%;transform:translateX(-50%);bottom:1px;width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.88}
+.battery{position:relative;width:24px;height:12px;padding:1.5px;border:1px solid rgba(44,46,40,.45);border-radius:3.5px}
+.battery::after{content:"";position:absolute;right:-3px;top:3.5px;width:2px;height:5px;border-radius:0 1px 1px 0;background:rgba(44,46,40,.45)}
+.battery .lv{display:block;width:78%;height:100%;border-radius:2px;background:currentColor;opacity:.85}
+
+/* ---------- 应用区 ---------- */
+.app{position:relative;z-index:2;display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0}
+.topbar{padding:var(--sp2) 16px var(--sp2);display:flex;align-items:flex-start;gap:12px}
+.titles{flex:1 1 auto;min-width:0}
+.pageTitle{margin:0;font-size:var(--fs-display);line-height:40px;font-weight:600;color:var(--ink);letter-spacing:0}
+.pageSub{margin:2px 0 0;font-size:var(--fs-label);line-height:20px;color:var(--ink-3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.avatar{
+  flex:0 0 auto;width:48px;height:48px;border-radius:var(--r-pill);border:1px solid var(--line);
+  background:var(--card);display:grid;place-items:center;cursor:pointer;color:var(--ink-2);
+  transition:background-color var(--dur-press) linear,transform var(--dur-press) var(--ease)}
+.avatar:active{transform:scale(.97)}
+
+/* ---------- 页面栈 ---------- */
+.views{position:relative;min-height:0}
+.page{
+  position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:0 16px calc(160px + env(safe-area-inset-bottom,0px));
+  opacity:0;visibility:hidden;transform:translateY(10px);
+  transition:opacity var(--dur-ui) linear,transform var(--dur-enter) var(--ease),visibility 0s linear var(--dur-ui);
+  -webkit-overflow-scrolling:touch;
+}
+.page.on{opacity:1;visibility:visible;transform:none;transition:opacity var(--dur-ui) linear,transform var(--dur-enter) var(--ease),visibility 0s}
+.page::-webkit-scrollbar{width:0}
+
+/* ---------- 明信片 ---------- */
+.postcard{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden;
+  box-shadow:0 10px 26px rgba(92,76,46,.10);margin-top:var(--sp2);
+}
+.postcard .art{position:relative;height:112px;background:linear-gradient(180deg,#DCE3C9,#C9D3B2);overflow:hidden}
+.postcard .art svg{position:absolute;inset:0;width:100%;height:100%}
+.chip{
+  position:absolute;left:12px;top:12px;height:28px;padding:0 12px 0 10px;border-radius:var(--r-pill);
+  display:inline-flex;align-items:center;gap:6px;background:rgba(252,248,238,.92);
+  border:1px solid var(--line);font-size:var(--fs-label);font-weight:500;color:var(--ink-2);
+}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent-ink)}
+.more{
+  position:absolute;right:8px;top:8px;width:48px;height:48px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(252,248,238,.92);display:grid;place-items:center;
+  cursor:pointer;color:var(--ink-2)
+}
+.more:active{transform:scale(.97)}
+.postcard .cap{height:74px;padding:12px 16px;display:flex;flex-direction:column;justify-content:center}
+.postcard .name{margin:0;font-size:var(--fs-title);line-height:28px;font-weight:600;color:var(--ink)}
+.postcard .meta{margin:2px 0 0;font-size:var(--fs-label);line-height:20px;color:var(--ink-3)}
+
+/* ---------- 分组头 / 纸卡列表 ---------- */
+.group{display:flex;align-items:center;justify-content:space-between;height:44px;margin-top:var(--sp4)}
+.group h2{margin:0;font-size:var(--fs-label);line-height:20px;font-weight:600;color:var(--ink-2)}
+.group .link{font-size:var(--fs-label);color:var(--accent-ink);text-decoration:none;min-height:44px;display:flex;align-items:center;gap:4px}
+
+.rows{background:var(--card);border:1px solid var(--line);border-radius:var(--r-row);overflow:hidden;
+  box-shadow:0 8px 20px rgba(92,76,46,.07)}
+.row{
+  display:grid;grid-template-columns:44px 1fr 48px;gap:12px;align-items:center;
+  min-height:70px;padding:12px;width:100%;text-align:left;background:transparent;border:0;
+  cursor:pointer;position:relative;
+}
+.row + .row::before{content:"";position:absolute;left:68px;right:0;top:0;height:1px;background:var(--line)}
+.row:active{background:rgba(122,104,72,.06)}
+.row:focus-visible,.sheet .item:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--accent-ink)}
+.search:focus-within{outline:2px solid var(--accent-ink);outline-offset:2px}
+.row .thumb{
+  width:44px;height:44px;border-radius:var(--r-thumb);overflow:hidden;background:#DDE3CC;
+  display:grid;place-items:center;flex:0 0 auto
+}
+.row .thumb svg{width:100%;height:100%}
+.row .t{min-width:0}
+.row .t b{display:block;font-size:var(--fs-body);line-height:24px;font-weight:500;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .t span{display:block;font-size:var(--fs-label);line-height:20px;color:var(--ink-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .chev{color:var(--ink-3);opacity:.7}
+.rowMore{
+  width:48px;height:48px;border:0;border-radius:var(--r-pill);background:transparent;
+  display:grid;place-items:center;color:var(--ink-3);cursor:pointer;flex:0 0 auto;position:relative
+}
+.rowMore::before{content:"";position:absolute;left:-2px;right:-2px;top:50%;transform:translateY(-50%);height:52px}
+.rowMore:active{background:rgba(122,104,72,.08)}
+.rowMore:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.hint{margin:var(--sp3) 0 0;font-size:var(--fs-label);line-height:20px;color:var(--ink-3);text-align:center}
+
+/* ---------- 空态 ---------- */
+.empty{
+  margin-top:var(--sp6);background:var(--card);border:1px dashed var(--line-strong);
+  border-radius:var(--r-card);padding:28px 20px;text-align:center;
+}
+.empty h3{margin:0 0 6px;font-size:var(--fs-body);line-height:24px;font-weight:500;color:var(--ink)}
+.empty p{margin:0;font-size:var(--fs-label);line-height:20px;color:var(--ink-3)}
+.empty button{
+  margin-top:14px;min-height:44px;padding:0 20px;border-radius:var(--r-pill);border:0;
+  background:var(--accent-ink);color:var(--on-accent);font-size:var(--fs-body);font-weight:500;cursor:pointer
+}
+
+/* ---------- 下载 ---------- */
+.segmented{
+  display:flex;gap:6px;padding:4px;margin-top:var(--sp2);
+  background:rgba(252,248,238,.7);border:1px solid var(--line);border-radius:var(--r-pill);
+}
+.segmented button{
+  flex:1 1 0;min-height:38px;border:0;border-radius:var(--r-pill);background:transparent;
+  font-size:var(--fs-label);font-weight:500;color:var(--ink-3);cursor:pointer;
+  transition:background-color var(--dur-press) linear,color var(--dur-press) linear
+}
+.segmented button.on{background:var(--accent-wash);color:var(--accent-ink)}
+.search{
+  margin-top:var(--sp3);display:flex;align-items:center;gap:8px;height:48px;padding:0 14px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-pill)
+}
+.search input{
+  flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:var(--fs-body);color:var(--ink)
+}
+.search input::placeholder{color:var(--ink-2);opacity:1}
+.dl{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;min-height:72px;padding:12px}
+.dl + .dl{border-top:1px solid var(--line)}
+.dl .t b{display:block;font-size:var(--fs-body);line-height:24px;font-weight:500;color:var(--ink)}
+.dl .t span{display:block;font-size:var(--fs-label);line-height:20px;color:var(--ink-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.get{
+  min-width:76px;min-height:44px;padding:0 16px;border-radius:var(--r-pill);border:1px solid var(--accent-ink);
+  background:transparent;color:var(--accent-ink);font-size:var(--fs-label);font-weight:500;cursor:pointer
+}
+.get.done{border-color:var(--line);color:var(--ink-3);background:rgba(122,104,72,.06)}
+.bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:var(--accent-ink);transition:width .2s linear}
+
+/* 骨架 */
+.sk{background:var(--line-strong);opacity:.35;border-radius:var(--r-pill);height:12px}
+.skRow{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;min-height:72px;padding:12px}
+.skRow + .skRow{border-top:1px solid var(--line)}
+.skRow .sq{width:44px;height:44px;border-radius:var(--r-thumb);background:var(--line-strong);opacity:.25}
+.skRow .l1{width:62%}.skRow .l2{width:40%;margin-top:8px;height:10px}
+
+/* ---------- 设置 ---------- */
+.setGroup{margin-top:var(--sp5,20px)}
+.setGroup h2{margin:0 0 8px 4px;font-size:var(--fs-label);font-weight:600;color:var(--ink-2)}
+.setRow{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;position:relative}
+.setRow + .setRow::before{content:"";position:absolute;left:16px;right:0;top:0;height:1px;background:var(--line)}
+.setRow .lab{flex:1;font-size:var(--fs-body);color:var(--ink)}
+.setRow .val{font-size:var(--fs-label);color:var(--ink-3)}
+.switch{
+  width:48px;height:28px;border-radius:var(--r-pill);border:1px solid var(--ink-3);
+  background:rgba(122,104,72,.22);position:relative;cursor:pointer;flex:0 0 auto;transition:background-color .16s linear
+}
+.switch i{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--card);
+  box-shadow:0 1px 2px rgba(60,50,35,.25);transition:transform .16s var(--ease)}
+.switch.on{background:var(--accent-ink);border-color:var(--accent-ink)}
+.switch.on i{transform:translateX(20px)}
+.switch[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+.stepper{display:flex;align-items:center;gap:6px}
+.stepper button{width:48px;height:48px;border-radius:50%;border:1px solid var(--line);background:transparent;cursor:pointer;color:var(--ink-2)}
+.stepper output{min-width:32px;text-align:center;font-size:var(--fs-label);color:var(--ink)}
+
+/* ---------- 灵动岛 ---------- */
+.island{
+  position:absolute;left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:4;height:64px;
+  display:grid;grid-template-columns:40px 1fr 48px;align-items:center;gap:12px;padding:0 12px;
+  border-radius:var(--r-pill);border:1px solid rgba(255,255,255,.78);
+  background:rgba(252,249,242,.82);
+  -webkit-backdrop-filter:blur(14px) saturate(1.15);backdrop-filter:blur(14px) saturate(1.15);
+  box-shadow:0 14px 32px rgba(80,70,55,.18)
+}
+.verPick{
+  display:flex;align-items:center;gap:6px;min-height:48px;padding:0 4px;border:0;background:transparent;
+  text-align:left;cursor:pointer;border-radius:var(--r-thumb);color:inherit;min-width:0
+}
+.verPick .meta{min-width:0;flex:1 1 auto}
+.verPick .chev{flex:0 0 auto;color:var(--ink-3)}
+.verPick:active{background:rgba(122,104,72,.08)}
+.verPick:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.island .ic{width:40px;height:40px;border-radius:var(--r-thumb);overflow:hidden;background:#DDE3CC;display:grid;place-items:center}
+.island .ic svg{width:100%;height:100%}
+.island .meta b{display:block;font-size:var(--fs-body);line-height:20px;font-weight:600;color:var(--ink)}
+.island .meta span{display:block;font-size:var(--fs-label);line-height:18px;color:var(--ink-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.island .go{
+  width:48px;height:48px;border-radius:50%;border:0;background:var(--accent-ink);color:var(--on-accent);
+  display:grid;place-items:center;cursor:pointer;transition:transform var(--dur-press) var(--ease)
+}
+.island .go:active{transform:scale(.94)}
+.island.launching{grid-template-columns:40px 1fr 48px}
+.island .prog{position:absolute;left:12px;right:12px;bottom:6px;height:3px;border-radius:2px;background:rgba(122,104,72,.18);overflow:hidden;opacity:0;transition:opacity .2s}
+.island.launching .prog{opacity:1}
+.island .prog i{display:block;height:100%;width:0;background:var(--accent-ink);transition:width .18s linear}
+
+/* ---------- 底栏 ---------- */
+.tabbar{
+  position:absolute;left:0;right:0;bottom:0;z-index:5;
+  height:calc(72px + env(safe-area-inset-bottom,0px));
+  border-radius:var(--r-bar) var(--r-bar) 0 0;border-top:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(246,240,226,.96),rgba(232,221,196,.98));
+  display:grid;grid-template-columns:repeat(3,1fr);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));
+}
+.tab{
+  border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  min-height:54px;color:var(--ink-3);cursor:pointer;position:relative
+}
+.tab .ind{position:absolute;top:2px;width:52px;height:30px;border-radius:var(--r-pill);background:transparent;
+  transition:background-color var(--dur-ui) linear,transform var(--dur-ui) var(--ease)}
+.tab.on .ind{background:var(--accent-wash)}
+.tab.on{color:var(--accent-ink);font-weight:600}
+.tab svg{position:relative;width:24px;height:24px}
+.tab span{position:relative;font-size:var(--fs-label);line-height:20px}
+
+/* ---------- 弹层 ---------- */
+.scrim{position:absolute;inset:0;z-index:6;background:var(--scrim);opacity:0;visibility:hidden;
+  transition:opacity var(--dur-ui) linear,visibility 0s linear var(--dur-ui)}
+.scrim.on{opacity:1;visibility:visible;transition:opacity var(--dur-ui) linear,visibility 0s}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:7;background:var(--card);
+  border-radius:var(--r-bar) var(--r-bar) 0 0;border-top:1px solid var(--line);
+  padding:8px 16px calc(16px + env(safe-area-inset-bottom,0px));
+  transform:translateY(102%);opacity:0;visibility:hidden;
+  transition:transform var(--dur-enter) var(--ease),opacity 180ms linear,
+             visibility 0s linear var(--dur-enter);
+  box-shadow:0 -12px 32px rgba(80,70,55,.16);max-height:78%;overflow:auto
+}
+.sheet.on{transform:none;opacity:1;visibility:visible;
+  transition:transform var(--dur-enter) var(--ease),opacity 180ms linear,visibility 0s}
+.sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--line-strong);margin:6px auto 12px}
+.sheet h3{margin:0 0 4px;font-size:var(--fs-title);line-height:28px;font-weight:600}
+.sheet .sub{margin:0 0 12px;font-size:var(--fs-label);line-height:20px;color:var(--ink-3)}
+.sheet .item{
+  display:flex;align-items:center;gap:12px;min-height:56px;width:100%;padding:8px 4px;border:0;
+  background:transparent;text-align:left;cursor:pointer;border-radius:var(--r-row)
+}
+.sheet .item:active{background:rgba(122,104,72,.06)}
+.sheet .item .t{flex:1;min-width:0}
+.sheet .item b{display:block;font-size:var(--fs-body);line-height:24px;font-weight:500}
+.sheet .item span{display:block;font-size:var(--fs-label);line-height:20px;color:var(--ink-3)}
+.sheet .item.danger b{color:var(--danger)}
+
+.dialog{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-46%) scale(.97);z-index:8;width:300px;
+  background:var(--card);border-radius:var(--r-card);border:1px solid var(--line);padding:20px;
+  box-shadow:0 24px 60px rgba(60,50,35,.28);opacity:0;visibility:hidden;
+  transition:opacity .16s linear,transform .24s var(--ease),visibility 0s linear .16s
+}
+.dialog.on{opacity:1;visibility:visible;transform:translate(-50%,-50%) scale(1);transition:opacity .16s linear,transform .24s var(--ease),visibility 0s}
+.dialog h3{margin:0 0 8px;font-size:var(--fs-body);line-height:24px;font-weight:600}
+.dialog p{margin:0;font-size:var(--fs-label);line-height:20px;color:var(--ink-3)}
+.dialog .acts{display:flex;gap:10px;margin-top:18px}
+.dialog .acts button{flex:1;min-height:44px;border-radius:var(--r-pill);border:1px solid var(--line);background:transparent;cursor:pointer;font-size:var(--fs-label);font-weight:500}
+.dialog .acts .primary{background:var(--accent-ink);border-color:var(--accent-ink);color:var(--on-accent)}
+.dialog .acts .danger{background:var(--danger);border-color:var(--danger);color:#FBF3EC}
+
+/* toast */
+.toast{
+  position:absolute;left:50%;bottom:calc(170px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px);z-index:9;
+  background:rgba(44,46,40,.92);color:#F8F3E7;font-size:var(--fs-label);line-height:20px;
+  padding:9px 16px;border-radius:var(--r-pill);opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .16s linear,transform .24s var(--ease),visibility 0s linear .16s;white-space:nowrap
+}
+.toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .16s linear,transform .24s var(--ease),visibility 0s}
+
+:focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px;border-radius:6px}
+
+/* ---------- 热区补齐：视觉不变，实际命中 ≥48（Material 建议） ---------- */
+.segmented button,.stepper button,.avatar,.island .go,.get,
+.dialog .acts button,.empty button,.search,.switch,.rowMore{position:relative;overflow:visible}
+.segmented button::before,.avatar::before,.more::before,.island .go::before,
+.get::before,.dialog .acts button::before,.empty button::before,.search::before,.switch::before{
+  content:"";position:absolute;left:-2px;right:-2px;top:50%;transform:translateY(-50%);height:52px;
+}
+.island .go::before{left:-3px;right:-3px;height:54px;border-radius:50%}
+.stepper button::before{left:-4px;right:-4px;height:52px}
+
+/* ---------- 热区标注层（工具，不属于界面） ---------- */
+#hitLayer{position:fixed;inset:0;pointer-events:none;z-index:9998;display:none}
+#hitLayer.on{display:block}
+.hit{position:absolute;border:1.5px dashed rgba(76,97,67,.85);border-radius:6px;background:rgba(76,97,67,.07)}
+.hit.pass{border-color:rgba(76,97,67,.85);background:rgba(76,97,67,.07)}
+.hit.fail{border-color:rgba(140,79,63,.95);background:rgba(140,79,63,.08)}
+.hit.fail > b{background:rgba(140,79,63,.95)}
+.hit.visual{border-style:solid;border-width:1px;border-color:rgba(44,46,40,.45);background:none;border-radius:4px}
+.hit > b{position:absolute;left:-1px;top:-1px;transform:translateY(-100%);
+  font:10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0;
+  background:rgba(76,97,67,.94);color:#F8F3E7;padding:2px 5px;border-radius:3px 3px 3px 0;white-space:nowrap}
+.hit.visual > b{display:none}
+
+#hitLegend{position:fixed;right:12px;top:12px;z-index:9999;display:none;min-width:210px;
+  padding:8px 10px;border-radius:10px;background:rgba(248,243,231,.96);color:#2C2E28;
+  border:1px solid rgba(122,104,72,.3);font:12px/1.7 var(--font);box-shadow:0 6px 18px rgba(60,50,35,.18)}
+#hitLegend.on{display:block}
+#hitLegend .row1{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+#hitLegend .row1 b{font-size:12px}
+#hitLegend button{appearance:none;border:1px solid rgba(122,104,72,.4);background:transparent;
+  color:#2C2E28;font:inherit;padding:3px 8px;border-radius:999px;cursor:pointer;min-height:24px}
+#hitLegend button:active{background:rgba(122,104,72,.12)}
+#hitLegend i{display:inline-block;width:14px;height:8px;vertical-align:-1px;margin-right:6px}
+#hitLegend i.d{border:1.5px dashed rgba(76,97,67,.95);border-radius:2px}
+#hitLegend i.s{border:1px solid rgba(44,46,40,.6);border-radius:2px}
+@media (max-width:430px),(max-height:860px){
+  #hitLegend{right:8px;bottom:auto;top:8px;font-size:11px;padding:5px 8px}
+}
+
+
+/* ---------- 自适应 ---------- */
+@media (max-width:430px){
+  body{display:block;height:100%}
+  .stage{width:100%;height:100%;border-radius:0;box-shadow:none}
+}
+/* 窗口够宽但不够高：保留手机框，让页面滚动，不要把 390 拉伸 */
+@media (min-width:431px) and (max-height:820px){
+  body{display:block;padding:16px 0;overflow:auto}
+  .stage{margin:0 auto}
+}
+@media (prefers-reduced-motion:reduce){
+  .page,.dialog,.toast{transition-duration:.001s!important}
+  .page,.page.on{transform:none!important}
+  .sheet{transition:opacity 120ms linear,visibility 0s linear 120ms}
+  .sheet.on{transition:opacity 120ms linear,visibility 0s}
+  .island,.row,.tab,.go,.switch{transition-duration:.001s!important}
+}
+/* 用户主动关闭动效时同样生效（设置里的「动效」开关） */
+body.no-motion .page,body.no-motion .dialog,body.no-motion .toast{transition-duration:.001s!important}
+body.no-motion .page,body.no-motion .page.on{transform:none!important}
+/* 不支持毛玻璃 / 用户要求降低透明度 → 岛退化为实色 */
+@media (prefers-reduced-transparency:reduce){
+  .island{background:#F7F4EC;-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@supports not ((backdrop-filter:blur(2px)) or (-webkit-backdrop-filter:blur(2px))){
+  .island{background:#F7F4EC}
+}
+@media (prefers-contrast:more){
+  .island{background:#FCF8EE;border-color:var(--ink-3)}
+  .row .t span,.pageSub,.hint{color:var(--ink-2)}
+}
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+  <div class="fiber" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <div class="statusbar" aria-hidden="true">
+    <span>9:41</span>
+    <span class="glyphs">
+      <span class="signal"><i></i><i></i><i></i><i></i></span>
+      <span class="wifi"><i></i><i></i><b></b></span>
+      <span class="battery"><span class="lv"></span></span>
+    </span>
+  </div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="titles">
+        <h1 class="pageTitle" id="pageTitle">世界</h1>
+        <p class="pageSub" id="pageSub">4 个世界 · 上次游玩 2 天前</p>
+      </div>
+      <button class="avatar" id="accountBtn" aria-label="账户">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8.5" r="3.6" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M5 20c1.6-3.6 4-5.2 7-5.2s5.4 1.6 7 5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="views" id="views">
+      <!-- ================= 世界 ================= -->
+      <section class="page on" data-page="world" aria-label="世界">
+        <article class="postcard" id="currentCard"></article>
+
+        <div class="group">
+          <h2>其他世界</h2>
+        </div>
+        <div class="rows" id="worldRows"></div>
+        <p class="hint">长按世界可管理</p>
+      </section>
+
+      <!-- ================= 下载 ================= -->
+      <section class="page" data-page="download" aria-label="下载">
+        <div class="segmented" id="segmented" role="tablist">
+          <button class="on" data-kind="modpack" role="tab">整合包</button>
+          <button data-kind="mod" role="tab">模组</button>
+          <button data-kind="resourcepack" role="tab">资源包</button>
+          <button data-kind="shader" role="tab">光影</button>
+        </div>
+        <label class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--ink-3)">
+            <circle cx="11" cy="11" r="6.4" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M15.8 15.8L20 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <input id="searchInput" type="search" placeholder="搜索整合包、模组、资源包或光影" autocomplete="off" aria-label="搜索整合包、模组、资源包或光影" />
+        </label>
+        <div class="rows" id="dlRows" style="margin-top:12px"></div>
+      </section>
+
+      <!-- ================= 设置 ================= -->
+      <section class="page" data-page="setting" aria-label="设置">
+        <div class="setGroup">
+          <h2>外观</h2>
+          <div class="rows">
+            <div class="setRow">
+              <span class="lab">纸面主题</span>
+              <span class="val">米黄</span>
+            </div>
+            <div class="setRow">
+              <span class="lab">深色纸</span>
+              <button class="switch" role="switch" aria-checked="false" aria-disabled="true" disabled aria-label="深色纸，暂未开放"><i></i></button>
+            </div>
+            <div class="setRow">
+              <span class="lab">动效</span>
+              <button class="switch on" id="swMotion" role="switch" aria-checked="true" aria-label="动效"><i></i></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="setGroup">
+          <h2>性能</h2>
+          <div class="rows">
+            <div class="setRow">
+              <span class="lab">下载线程</span>
+              <span class="stepper">
+                <button id="thMinus" aria-label="减少线程">−</button>
+                <output id="threads">8</output>
+                <button id="thPlus" aria-label="增加线程">+</button>
+              </span>
+            </div>
+            <div class="setRow">
+              <span class="lab">下载镜像</span>
+              <span class="val">自动</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="setGroup">
+          <h2>关于</h2>
+          <div class="rows">
+            <div class="setRow"><span class="lab">版本</span><span class="val">1.3.4.1 · 纸质界面</span></div>
+            <div class="setRow"><span class="lab">开源许可</span><span class="val">GPLv3 / MIT</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 灵动岛 -->
+  <div class="island" id="island">
+    <span class="ic" aria-hidden="true"></span>
+    <button class="verPick" id="verPick" aria-label="选择版本">
+      <span class="meta"><b id="islandVer">—</b><span id="islandLoader">—</span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M4 6.5L8 10.5L12 6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <button class="go" id="launchBtn" aria-label="启动">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.5 5.6c0-.8.9-1.3 1.6-.9l8.2 6.4a1.1 1.1 0 010 1.8l-8.2 6.4c-.7.4-1.6-.1-1.6-.9V5.6z"/></svg>
+    </button>
+    <span class="prog" aria-hidden="true"><i id="progBar"></i></span>
+  </div>
+
+  <!-- 底栏 -->
+  <nav class="tabbar" id="tabbar" aria-label="主导航">
+    <button class="tab on" data-tab="world" aria-current="page">
+      <span class="ind" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="7.6" height="7.6" rx="2" stroke="currentColor" stroke-width="1.7"/><rect x="12.9" y="3.5" width="7.6" height="7.6" rx="2" stroke="currentColor" stroke-width="1.7"/><rect x="3.5" y="12.9" width="7.6" height="7.6" rx="2" stroke="currentColor" stroke-width="1.7"/><rect x="12.9" y="12.9" width="7.6" height="7.6" rx="2" stroke="currentColor" stroke-width="1.7"/></svg>
+      <span>世界</span>
+    </button>
+    <button class="tab" data-tab="download">
+      <span class="ind" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.8v9.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8.2 9.6L12 13.4l3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 16.2v2.3a1.7 1.7 0 001.7 1.7h11.6a1.7 1.7 0 001.7-1.7v-2.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>下载</span>
+    </button>
+    <button class="tab" data-tab="setting">
+      <span class="ind" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="7" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="17" r="2.4" stroke="currentColor" stroke-width="1.7"/></svg>
+      <span>设置</span>
+    </button>
+  </nav>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- 版本选择 -->
+  <div class="sheet" id="versionSheet" role="dialog" aria-modal="true" aria-label="选择版本">
+    <div class="grab" aria-hidden="true"></div>
+    <h3>选择版本</h3>
+    <p class="sub">启动时使用的实例</p>
+    <div id="versionList"></div>
+  </div>
+
+  <!-- 世界操作 -->
+  <div class="sheet" id="worldSheet" role="dialog" aria-modal="true" aria-label="世界操作">
+    <div class="grab" aria-hidden="true"></div>
+    <h3 id="wsName">世界</h3>
+    <p class="sub" id="wsMeta">—</p>
+    <button class="item" data-act="enter"><span class="t"><b>进入世界</b><span>用当前版本启动</span></span></button>
+    <button class="item" data-act="setCurrent"><span class="t"><b>设为当前世界</b><span>显示在首页明信片</span></span></button>
+    <button class="item danger" data-act="delete"><span class="t"><b>从列表移除</b><span>不会删除存档文件，可撤销</span></span></button>
+  </div>
+
+  <!-- 确认框 -->
+  <div class="dialog" id="confirm" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle">
+    <h3 id="cfTitle">从列表移除这个世界？</h3>
+    <p id="cfBody">只从首页列表移除，不会删除存档文件。移除后可以撤销。</p>
+    <div class="acts">
+      <button id="cfCancel">保留</button>
+      <button class="danger" id="cfOk">移除</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</main>
+
+<div id="hitLayer" aria-hidden="true"></div>
+<div id="hitLegend">
+  <div class="row1">
+    <b>热区标注</b>
+    <button id="hitToggle" aria-pressed="false" title="关闭（H）">关闭</button>
+  </div>
+  <div><i class="d"></i>虚线 = 实测热区（≥48 绿 / &lt;48 红）</div>
+  <div><i class="s"></i>实线 = 视觉尺寸</div>
+</div>
+
+<script>
+/* =========================================================================
+   状态
+   ========================================================================= */
+const ART = [
+  // 生存：草坡 + 针叶树
+  `<svg viewBox="0 0 120 44" preserveAspectRatio="xMidYMid slice">
+     <rect width="120" height="44" fill="#E6EED8"/>
+     <circle cx="97" cy="10" r="4.6" fill="#E3C98E"/>
+     <path d="M0 30l16-13 12 9 14-15 16 14 14-8 16 11 16-7 16 9v12H0z" fill="#A8BB8E"/>
+     <path d="M0 36l20-8 16 6 18-10 18 8 16-6 16 8 16-4v12H0z" fill="#7F9470"/>
+     <rect x="27" y="25" width="3.6" height="11" fill="#6B5B45"/>
+     <circle cx="28.8" cy="22.6" r="6" fill="#5E6E56"/>
+   </svg>`,
+  // 工坊：暖沙 + 方块塔
+  `<svg viewBox="0 0 120 44" preserveAspectRatio="xMidYMid slice">
+     <rect width="120" height="44" fill="#F0E4C8"/>
+     <rect x="14" y="18" width="13" height="20" fill="#8A6F55"/>
+     <rect x="29" y="10" width="10" height="28" fill="#7A5D47"/>
+     <rect x="41" y="22" width="17" height="16" fill="#B0765A"/>
+     <rect x="60" y="15" width="12" height="23" fill="#8A6F55"/>
+     <rect x="74" y="20" width="9" height="18" fill="#7A5D47"/>
+     <circle cx="95" cy="13" r="4.6" fill="#C99A55"/>
+     <path d="M0 38h120v6H0z" fill="#C9A97E"/>
+   </svg>`,
+  // 空岛：水面 + 浮岛
+  `<svg viewBox="0 0 120 44" preserveAspectRatio="xMidYMid slice">
+     <rect width="120" height="44" fill="#DDE8E4"/>
+     <path d="M0 27c14-5 24-1 36-5s26 2 38-2 30 0 46-4v28H0z" fill="#CBDCD6"/>
+     <path d="M0 33c16-5 26 0 40-4s24 3 38-1 28 1 42-3v19H0z" fill="#A8C3B8"/>
+     <ellipse cx="52" cy="24" rx="16" ry="7" fill="#7F9470"/>
+     <path d="M38 24h28l-5 5H43z" fill="#8A6F55"/>
+     <circle cx="52" cy="18" r="3.2" fill="#5E6E56"/>
+   </svg>`
+];
+
+const state = {
+  tab: 'world',
+  motion: true,
+  threads: 8,
+  kind: 'modpack',
+  query: '',
+  launching: false,
+  currentWorldId: 'w1',
+  activeProfileId: 'p1',
+  profiles: [
+    { id: 'p1', name: '1.21.5', loader: 'Fabric 0.16.9' },
+    { id: 'p2', name: '1.21.4', loader: 'NeoForge 21.1.0' },
+    { id: 'p3', name: '1.20.1', loader: 'Forge 47.2.0' },
+    { id: 'p4', name: '1.21.1', loader: 'NeoForge 21.1.0' }
+  ],
+  // 每个世界绑定自己的实例；启动用的就是这一条，不再借用「全局当前实例」
+  worlds: [
+    { id: 'w1', name: '生存存档', profileId: 'p1', ago: '2 天前', art: 0 },
+    { id: 'w2', name: '红石实验室', profileId: 'p3', ago: '5 天前', art: 1 },
+    { id: 'w3', name: '空岛生存', profileId: 'p4', ago: '1 周前', art: 2 },
+    { id: 'w4', name: '创造工坊', profileId: 'p2', ago: '2 周前', art: 0 }
+  ],
+  removed: null,
+  downloads: {
+    modpack: [
+      { id: 'm1', name: '原版增强 · 1.21.5', by: '社区整合', size: '128 MB' },
+      { id: 'm2', name: '轻量生存包', by: 'modpack-studio', size: '46 MB' },
+      { id: 'm3', name: '科技整合 · NeoForge', by: 'atm 系列', size: '512 MB' }
+    ],
+    mod: [
+      { id: 'd1', name: 'Sodium', by: '渲染优化', size: '1.2 MB' },
+      { id: 'd2', name: 'Just Enough Items', by: '物品查询', size: '3.4 MB' },
+      { id: 'd3', name: 'AppleSkin', by: '食物信息', size: '0.3 MB' },
+      { id: 'd4', name: 'Architectury API', by: '前置库', size: '1.8 MB' }
+    ],
+    resourcepack: [
+      { id: 'r1', name: '纸质风格材质包', by: '16×', size: '12 MB' },
+      { id: 'r2', name: '清晰字体', by: '字体', size: '2 MB' }
+    ],
+    shader: [
+      { id: 's1', name: '柔光光影', by: '轻量', size: '4 MB' },
+      { id: 's2', name: '纸影 · 低配', by: '社区', size: '6 MB' }
+    ]
+  },
+  installed: new Set()
+};
+
+const PAGE_META = {
+  world:    { title: '世界', sub: () => `${state.worlds.length} 个世界 · 上次游玩 2 天前` },
+  download: { title: '下载', sub: () => '整合包 · 模组 · 资源包 · 光影' },
+  setting:  { title: '设置', sub: () => '外观 · 性能 · 关于' }
+};
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* =========================================================================
+   渲染
+   ========================================================================= */
+function renderHeader() {
+  $('#pageTitle').textContent = PAGE_META[state.tab].title;
+  $('#pageSub').textContent = PAGE_META[state.tab].sub();
+}
+
+function renderWorlds() {
+  const cur = state.worlds.find(w => w.id === state.currentWorldId) || state.worlds[0];
+  const card = $('#currentCard');
+
+  if (!state.worlds.length) {
+    card.innerHTML = `
+      <div class="empty" style="margin:0">
+        <h3>还没有世界</h3>
+        <p>创建或导入一个世界后，这里会显示最近游玩的那个。</p>
+        <button id="emptyNew">新建世界</button>
+      </div>`;
+    const btn = $('#emptyNew');
+    if (btn) btn.onclick = () => toast('新建世界：等待接入创建流程');
+    $('#worldRows').innerHTML = '';
+    return;
+  }
+
+  card.innerHTML = `
+    <div class="art">
+      ${ART[cur.art] || ART[0]}
+      <span class="chip"><span class="dot"></span>当前世界</span>
+      <button class="more" id="cardMore" aria-label="当前世界更多操作">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg>
+      </button>
+    </div>
+    <div class="cap">
+      <p class="name">${esc(cur.name)}</p>
+      <p class="meta">${esc(worldMeta(cur))}</p>
+    </div>`;
+
+  $('#cardMore').onclick = (e) => { e.stopPropagation(); openWorldSheet(cur.id); };
+  card.onclick = () => startLaunch(cur);
+
+  const others = state.worlds.filter(w => w.id !== cur.id);
+  $('#worldRows').innerHTML = others.map(w => `
+    <div class="row" data-world="${w.id}" role="button" tabindex="0"
+         aria-label="进入世界 ${esc(w.name)}">
+      <span class="thumb">${ART[w.art] || ART[0]}</span>
+      <span class="t">
+        <b>${esc(w.name)}</b>
+        <span>${esc(worldMetaShort(w))}</span>
+      </span>
+      <button class="rowMore" data-more="${w.id}" aria-label="管理 ${esc(w.name)}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg>
+      </button>
+    </div>`).join('');
+
+  // 单击进入世界；长按管理（页面上已提示「长按世界可管理」，行为与提示一致）
+  $$('#worldRows .row').forEach(btn => {
+    const w = state.worlds.find(x => x.id === btn.dataset.world);
+    let timer = null;
+    let longPressed = false;
+    const cancel = () => { clearTimeout(timer); };
+    btn.addEventListener('pointerdown', () => {
+      longPressed = false;
+      timer = setTimeout(() => { longPressed = true; openWorldSheet(w.id); }, 480);
+    });
+    btn.addEventListener('pointerup', cancel);
+    btn.addEventListener('pointerleave', cancel);
+    btn.addEventListener('pointercancel', cancel);
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+    btn.onclick = () => { if (!longPressed) startLaunch(w); };
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startLaunch(w); }
+      if (e.key === 'F10' && e.shiftKey) { e.preventDefault(); openWorldSheet(w.id); }
+    });
+    const more = btn.querySelector('.rowMore');
+    more.addEventListener('click', (e) => { e.stopPropagation(); openWorldSheet(w.id); });
+  });
+}
+
+function profileOf(world) {
+  const pid = world && world.profileId ? world.profileId : state.activeProfileId;
+  return state.profiles.find(x => x.id === pid) || state.profiles[0];
+}
+function currentWorld() {
+  return state.worlds.find(w => w.id === state.currentWorldId) || null;
+}
+function worldMeta(w) {
+  const p = profileOf(w);
+  return `${p.name} · ${p.loader} · 上次游玩 ${w.ago}`;
+}
+function worldMetaShort(w) {
+  const p = profileOf(w);
+  return `${p.name} · ${p.loader}`;
+}
+function renderIsland() {
+  const w = currentWorld();
+  const p = profileOf(w);
+  $('#islandVer').textContent = p.name;
+  $('#islandLoader').textContent = w ? `${p.loader} · ${w.name}` : p.loader;
+  const pick = document.getElementById('verPick');
+  if (pick) pick.setAttribute('aria-label', `当前版本 ${p.name}，${p.loader}，点按切换`);
+  const ic = $('.island .ic');
+  if (ic) ic.innerHTML = ART[w ? w.art : 0] || ART[0];
+}
+
+function renderVersions() {
+  $('#versionList').innerHTML = state.profiles.map(p => `
+    <button class="item" data-profile="${p.id}">
+      <span class="t"><b>${esc(p.name)}</b><span>${esc(p.loader)}</span></span>
+      ${p.id === profileOf(currentWorld()).id
+        ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="color:var(--accent-ink)"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        : ''}
+    </button>`).join('');
+
+  $$('#versionList .item').forEach(btn => {
+    btn.onclick = () => {
+      const w = currentWorld();
+      if (w) w.profileId = btn.dataset.profile; else state.activeProfileId = btn.dataset.profile;
+      renderIsland();
+      renderWorlds();
+      renderHeader();
+      renderVersions();
+      closeSheets();
+      $('#verPick').focus();
+      const p = profileOf(currentWorld());
+      toast(`已切换到 ${p.name}`);
+    };
+  });
+}
+
+function renderDownloads() {
+  const rows = $('#dlRows');
+  const list = state.downloads[state.kind] || [];
+  const q = state.query.trim().toLowerCase();
+  const filtered = q ? list.filter(d => (d.name + ' ' + d.by).toLowerCase().includes(q)) : list;
+
+  rows.innerHTML = '';
+  rows.style.marginTop = '12px';
+
+  if (!filtered.length) {
+    rows.innerHTML = `<div class="empty" style="margin:0">
+      <h3>没有匹配的结果</h3>
+      <p>换个关键词，或切换上面的分类。</p>
+      <button id="clearQ">清空搜索</button>
+    </div>`;
+    const b = $('#clearQ');
+    if (b) b.onclick = () => { state.query = ''; $('#searchInput').value = ''; renderDownloads(); };
+    return;
+  }
+
+  rows.innerHTML = filtered.map((d, di) => {
+    const done = state.installed.has(d.id);
+    return `<div class="dl" data-id="${d.id}">
+      <span class="thumb">${ART[di % 3]}</span>
+      <span class="t"><b>${esc(d.name)}</b><span>${esc(d.by)} · ${esc(d.size)}</span></span>
+      <button class="get ${done ? 'done' : ''}" data-get="${d.id}">${done ? '已安装' : '安装'}</button>
+    </div>`;
+  }).join('');
+
+  $$('#dlRows .get').forEach(btn => {
+    btn.onclick = () => startInstall(btn);
+  });
+}
+
+function startInstall(btn) {
+  const id = btn.dataset.get;
+  if (state.installed.has(id)) return;
+  if (btn.dataset.busy) return;
+  btn.dataset.busy = '1';
+  btn.textContent = '0%';
+
+  const row = btn.closest('.dl');
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  bar.innerHTML = '<i></i>';
+  row.querySelector('.t').appendChild(bar);
+  const fill = bar.querySelector('i');
+
+  let pct = 0;
+  const timer = setInterval(() => {
+    pct = Math.min(100, pct + 7 + Math.random() * 12);
+    fill.style.width = pct + '%';
+    btn.textContent = Math.round(pct) + '%';
+    if (pct >= 100) {
+      clearInterval(timer);
+      state.installed.add(id);
+      btn.textContent = '已安装';
+      btn.classList.add('done');
+      delete btn.dataset.busy;
+      setTimeout(() => bar.remove(), 400);
+      toast('安装完成');
+    }
+  }, 180);
+}
+
+/* =========================================================================
+   交互
+   ========================================================================= */
+const scrollMem = new Map();
+function switchTab(tab) {
+  if (tab === state.tab) return;
+  state.tab = tab;
+  $$('.page').forEach(p => p.classList.toggle('on', p.dataset.page === tab));
+  $$('.tab').forEach(t => {
+    const on = t.dataset.tab === tab;
+    t.classList.toggle('on', on);
+    if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+  });
+  renderHeader();
+  const page = $('.page.on');
+  page.scrollTop = scrollMem.get(tab) || 0;
+  page.addEventListener('scroll', () => scrollMem.set(tab, page.scrollTop), { passive: true });
+}
+
+function openSheet(el) {
+  closeSheets();
+  $('#scrim').classList.add('on');
+  el.classList.add('on');
+}
+function closeSheets() {
+  $$('.sheet').forEach(s => s.classList.remove('on'));
+  $('#scrim').classList.remove('on');
+}
+
+let pendingDelete = null;
+function openWorldSheet(id) {
+  const w = state.worlds.find(x => x.id === id);
+  if (!w) return;
+  $('#wsName').textContent = w.name;
+  $('#wsMeta').textContent = worldMeta(w);
+  $$('#worldSheet .item').forEach(it => {
+    it.onclick = () => {
+      const act = it.dataset.act;
+      closeSheets();
+      if (act === 'enter') { startLaunch(w); }
+      else if (act === 'setCurrent') { state.currentWorldId = w.id; renderWorlds(); toast('已设为当前世界'); }
+      else if (act === 'delete') { askDelete(w.id); }
+    };
+  });
+  openSheet($('#worldSheet'));
+}
+
+function askDelete(id) {
+  pendingDelete = id;
+  const w = state.worlds.find(x => x.id === id);
+  $('#cfTitle').textContent = `从列表移除「${w.name}」？`;
+  $('#cfBody').textContent = '只从首页列表移除，不会删除存档文件。移除后可以撤销。';
+  $('#confirm').classList.add('on');
+  $('#scrim').classList.add('on');
+}
+
+function confirmDelete() {
+  const idx = state.worlds.findIndex(w => w.id === pendingDelete);
+  if (idx >= 0) {
+    state.removed = { item: state.worlds[idx], idx, wasCurrent: state.currentWorldId === pendingDelete };
+    state.worlds.splice(idx, 1);
+    if (state.currentWorldId === pendingDelete) state.currentWorldId = (state.worlds[0] || {}).id || null;
+  }
+  closeDialog();
+  renderWorlds();
+  renderHeader();
+  toast('已删除，点此撤销', 3200, undoDelete);
+}
+
+function undoDelete() {
+  if (!state.removed) return;
+  const { item, idx, wasCurrent } = state.removed;
+  state.worlds.splice(idx, 0, item);
+  if (wasCurrent) state.currentWorldId = item.id;   // 原来就是当前世界的，撤销后回到当前
+  state.removed = null;
+  renderWorlds();
+  renderHeader();
+  renderIsland();
+  toast('已恢复');
+}
+
+function closeDialog() {
+  $('#confirm').classList.remove('on');
+  if (!$$('.sheet.on').length) $('#scrim').classList.remove('on');
+  pendingDelete = null;
+}
+
+/* ---------- 启动流程 ---------- */
+function startLaunch(world) {
+  if (state.launching) return;
+  const w = world || currentWorld();
+  if (!w) { toast('还没有世界可启动'); return; }
+  state.launching = true;
+  const island = $('#island');
+  island.classList.add('launching');
+  const bar = $('#progBar');
+  const p = profileOf(w);
+  $('#islandLoader').textContent = `${p.loader} · ${w.name}`;
+  const btn = $('#launchBtn');
+  btn.setAttribute('aria-disabled', 'true');
+
+  let pct = 0;
+  const timer = setInterval(() => {
+    pct = Math.min(100, pct + 6 + Math.random() * 10);
+    bar.style.width = pct + '%';
+    if (pct >= 100) {
+      clearInterval(timer);
+      island.classList.remove('launching');
+      bar.style.width = '0%';
+      $('#islandLoader').textContent = p.loader;
+      state.launching = false;
+      btn.removeAttribute('aria-disabled');
+      toast('已启动');
+    }
+  }, 150);
+}
+
+let toastTimer = null;
+function toast(msg, ms = 1800, onClick) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  t.style.pointerEvents = onClick ? 'auto' : 'none';
+  t.onclick = onClick || null;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('on'); t.onclick = null; }, ms);
+}
+
+/* =========================================================================
+   绑定
+   ========================================================================= */
+$$('.tab').forEach(t => t.onclick = () => switchTab(t.dataset.tab));
+
+$('#segmented').onclick = (e) => {
+  const btn = e.target.closest('button[data-kind]');
+  if (!btn) return;
+  state.kind = btn.dataset.kind;
+  $$('#segmented button').forEach(b => b.classList.toggle('on', b === btn));
+  // 模拟网络：先出骨架再出结果
+  const rows = $('#dlRows');
+  rows.innerHTML = Array.from({ length: 3 }, () => `
+    <div class="skRow"><span class="sq"></span>
+      <span><span class="sk l1" style="display:block"></span><span class="sk l2" style="display:block"></span></span>
+      <span class="sk" style="width:64px;height:32px"></span></div>`).join('');
+  setTimeout(renderDownloads, 420);
+};
+
+$('#searchInput').oninput = (e) => { state.query = e.target.value; renderDownloads(); };
+
+$('#verPick').onclick = () => { renderVersions(); openSheet($('#versionSheet')); };
+$('#launchBtn').onclick = () => startLaunch();
+$('#accountBtn').onclick = () => toast('账户：等待接入登录页');
+
+$('#scrim').onclick = () => { closeSheets(); closeDialog(); };
+$$('.sheet').forEach(s => s.addEventListener('click', e => { if (e.target === s) closeSheets(); }));
+$('#cfCancel').onclick = closeDialog;
+$('#cfOk').onclick = confirmDelete;
+
+$('#swMotion').onclick = (e) => {
+  const b = e.currentTarget;
+  state.motion = !state.motion;
+  b.classList.toggle('on', state.motion);
+  b.setAttribute('aria-checked', String(state.motion));
+  document.body.classList.toggle('no-motion', !state.motion);
+  toast(state.motion ? '动效已开启' : '动效已关闭');
+};
+$('#thMinus').onclick = () => setThreads(state.threads - 1);
+$('#thPlus').onclick = () => setThreads(state.threads + 1);
+function setThreads(n) {
+  state.threads = Math.max(1, Math.min(64, n));
+  $('#threads').textContent = state.threads;
+}
+
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeSheets(); closeDialog(); }
+});
+
+
+/* =========================================================================
+   热区标注（开发工具，不属于界面本身）
+   规则：成人指尖 44–48；视觉可以更小，可点区域必须 ≥44。
+   ========================================================================= */
+const HIT_RULES = [
+  ['.avatar', 44, '账户'],
+  ['.more', 44, '更多'],
+  ['.group .link', 44, '全部'],
+  ['.row', 70, '世界行'],
+  ['.segmented button', 44, '分类'],
+  ['.search', 44, '搜索框'],
+  ['.dl .get', 44, '安装'],
+  ['.island .go', 48, '启动'],
+  ['.island .verPick', 48, '选版本'],
+  ['.rowMore', 48, '管理'],
+  ['.tab', 54, '底栏项'],
+  ['.switch', 44, '开关'],
+  ['.stepper button', 44, '步进'],
+  ['.sheet .item', 56, '弹层项'],
+  ['.dialog .acts button', 44, '对话框按钮']
+];
+
+let hitOn = new URLSearchParams(location.search).get('hit') === '1';
+
+function clearHit() {
+  document.getElementById('hitLayer').innerHTML = '';
+}
+
+/**
+ * 真实命中区测量：从中心向四个方向逐像素探测 elementFromPoint，
+ * 直到不再命中该元素（或其子节点）为止。::before 扩出来的区域同样会被探到。
+ * 这样标注的是"手指真正能点到多大"，不是按约定值补出来的。
+ */
+function measureHit(el, r) {
+  const owns = (x, y) => {
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+    const t = document.elementFromPoint(x, y);
+    return !!t && (t === el || el.contains(t));   // 只认自身与子孙，祖先不算命中
+  };
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  let top = r.top, bottom = r.bottom, left = r.left, right = r.right;
+
+  for (let d = 1; d <= 48; d++) { if (owns(cx, r.top - d)) top = r.top - d; else break; }
+  for (let d = 1; d <= 48; d++) { if (owns(cx, r.bottom + d)) bottom = r.bottom + d; else break; }
+  for (let d = 2; d <= 180; d += 2) { if (owns(r.left - d, cy)) left = r.left - d; else break; }
+  for (let d = 2; d <= 180; d += 2) { if (owns(r.right + d, cy)) right = r.right + d; else break; }
+
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function drawHit() {
+  const layer = document.getElementById('hitLayer');
+  clearHit();
+  if (!hitOn) return;
+
+  HIT_RULES.forEach(([sel, min, name]) => {
+    document.querySelectorAll(sel).forEach(el => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return;
+      if (el.closest('.page:not(.on)')) return;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      if (r.bottom < 0 || r.top > innerHeight) return;   // 屏幕外的（如未展开的弹层）不标注
+
+      const hit = measureHit(el, r);
+      const okH = hit.height >= 48;
+      const okW = hit.width >= 48;
+
+      const box = document.createElement('div');
+      box.className = 'hit' + (okH && okW ? ' pass' : ' fail');
+      box.style.cssText =
+        `left:${hit.left}px;top:${hit.top}px;width:${hit.width}px;height:${hit.height}px`;
+      const label = document.createElement('b');
+      label.textContent =
+        `${Math.round(hit.height)}×${Math.round(hit.width)}`;
+      box.appendChild(label);
+      layer.appendChild(box);
+
+      // 真实热区比视觉大 → 额外画出视觉框，方便比较
+      if (hit.height - r.height > 1 || hit.width - r.width > 1) {
+        const v = document.createElement('div');
+        v.className = 'hit visual';
+        v.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+        layer.appendChild(v);
+      }
+    });
+  });
+}
+
+let hitTimer = null;
+function scheduleHit() {
+  if (!hitOn) return;
+  clearTimeout(hitTimer);
+  hitTimer = setTimeout(drawHit, 60);
+}
+
+function setHit(on) {
+  hitOn = on;
+  const layer = document.getElementById('hitLayer');
+  const btn = document.getElementById('hitToggle');
+  const legend = document.getElementById('hitLegend');
+  layer.classList.toggle('on', on);
+  legend.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.textContent = on ? '关闭' : '开启';
+  if (on) drawHit(); else clearHit();
+}
+
+document.getElementById('hitToggle').onclick = () => setHit(!hitOn);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'h' || e.key === 'H') { if (!e.metaKey && !e.ctrlKey) setHit(!hitOn); }
+});
+window.addEventListener('resize', scheduleHit);
+document.addEventListener('scroll', scheduleHit, true);
+
+/* 初始渲染 */
+renderHeader();
+renderWorlds();
+renderIsland();
+renderDownloads();
+
+// 各交互之后重画标注
+const _switchTab = switchTab, _openSheet = openSheet, _closeSheets = closeSheets;
+switchTab = function (t) { _switchTab(t); scheduleHit(); };
+openSheet = function (el) { _openSheet(el); scheduleHit(); };
+closeSheets = function () { _closeSheets(); scheduleHit(); };
+
+if (hitOn) setHit(true);
+</script>
+</body>
+</html>
