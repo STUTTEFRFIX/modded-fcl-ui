@@ -154,3 +154,17 @@ Android 对应 TouchDelegate，或容器 minHeight=44dp + 负 padding 反补。
 - 72 高的纸底栏 + 印色胶囊：品牌结构，项高 55 已 ≥48，登记为有意偏差。
 - 图标视觉保持 44–48，热区再扩到 48：即「看着小、摸着大」。
 
+---
+
+## 7. 液态玻璃改版预览（2026-11-17）
+
+在 V2 纸质基础上做的一版可浏览 UI 预览，不改 Android 实现：
+
+- 原型：[`prototype/fcl-paper-v2-preview.html`](prototype/fcl-paper-v2-preview.html)（单文件、零依赖）
+- 截图：[`screenshots/fcl-paper-v2-preview.png`](screenshots/fcl-paper-v2-preview.png)
+- 底栏 3 项 → 4 项（世界 / 版本 / 下载 / 设置），新增版本管理页，补齐实例、模组、资源包、光影、存档入口。
+- 明信片点击改为打开世界操作，启动统一走灵动岛；世界行拆分主操作与管理，去掉长按依赖。
+- 补齐加载 / 空 / 错误状态，设置内可切换演示；下载分类改为横向滚动，设置增加字号与液态玻璃开关。
+- 灵动岛：低模糊背景 + 静态径向透镜位移图（`feDisplacementMap`）让背景在边缘向内弯曲，配合方向性边缘高光与底部阴影；无 WebGL、无动画湍流，`?glass=off` 或关闭开关时退回磨砂。
+- 参考：液态玻璃 CSS 思路参考 [yzrt](https://gitee.com/greyd097/yzrt)（GPLv2）。
+
